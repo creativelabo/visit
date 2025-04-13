@@ -186,7 +186,6 @@
             </div>
             <p id="errorMessage"></p>
         </div>
-
         
         <!-- ステップ2: 住所を確認・編集 -->
         <div class="card hidden" id="step2">
@@ -310,42 +309,88 @@ function captureImage() {
         
         // 住所を処理
         function processAddresses() {
-            // 現在位置を取得
-            if (navigator.geolocation) {
-                document.getElementById('loadingProcess').style.display = 'block';
-                document.getElementById('processAddressesButton').disabled = true;
+    // 現在位置を取得
+    document.getElementById('loadingProcess').style.display = 'block';
+    document.getElementById('processAddressesButton').disabled = true;
+    
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            // 成功時のコールバック
+            position => {
+                currentPosition = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude
+                };
+                console.log("現在位置を取得しました:", currentPosition);
                 
-                navigator.geolocation.getCurrentPosition(position => {
-                    currentPosition = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude
-                    };
-                    
-                    // 入力された住所を取得
-                    const addressText = document.getElementById('addressesTextarea').value.trim();
-                    if (!addressText) {
-                        alert("住所を入力してください");
-                        document.getElementById('loadingProcess').style.display = 'none';
-                        document.getElementById('processAddressesButton').disabled = false;
-                        return;
-                    }
-                    
-                    // 住所をリスト化
-                    addresses = addressText.split('\n').filter(address => address.trim() !== "");
-                    
-                    // Google Mapsの初期化
-                    initMap();
-                    
-                }, error => {
-                    console.error('位置情報の取得に失敗しました:', error);
-                    alert('現在位置を取得できませんでした。ブラウザの位置情報サービスを有効にしてください。');
+                // 入力された住所を取得
+                const addressText = document.getElementById('addressesTextarea').value.trim();
+                if (!addressText) {
+                    alert("住所を入力してください");
                     document.getElementById('loadingProcess').style.display = 'none';
                     document.getElementById('processAddressesButton').disabled = false;
-                });
-            } else {
-                alert('お使いのブラウザは位置情報サービスをサポートしていません。');
+                    return;
+                }
+                
+                // 住所をリスト化
+                addresses = addressText.split('\n').filter(address => address.trim() !== "");
+                
+                // Google Mapsの初期化
+                initMap();
+            },
+            // エラー時のコールバック
+            error => {
+                console.error('位置情報の取得に失敗しました:', error);
+                // エラーコードに基づいたメッセージ
+                let errorMessage = "";
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        errorMessage = "位置情報へのアクセスが拒否されました。ブラウザの設定で位置情報の使用を許可してください。";
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        errorMessage = "位置情報が利用できません。";
+                        break;
+                    case error.TIMEOUT:
+                        errorMessage = "位置情報の取得がタイムアウトしました。";
+                        break;
+                    default:
+                        errorMessage = "位置情報の取得中に不明なエラーが発生しました。";
+                        break;
+                }
+                alert(errorMessage);
+                
+                // デバッグモード: 位置情報が取得できない場合でもテスト用の位置を設定
+                console.log("位置情報が取得できないため、デフォルト位置を使用します");
+                currentPosition = { lat: 35.0116, lng: 135.7681 }; // 京都の中心付近
+                
+                // 入力された住所を取得
+                const addressText = document.getElementById('addressesTextarea').value.trim();
+                if (!addressText) {
+                    alert("住所を入力してください");
+                    document.getElementById('loadingProcess').style.display = 'none';
+                    document.getElementById('processAddressesButton').disabled = false;
+                    return;
+                }
+                
+                // 住所をリスト化
+                addresses = addressText.split('\n').filter(address => address.trim() !== "");
+                
+                // Google Mapsの初期化
+                initMap();
+            },
+            // オプション
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
             }
-        }
+        );
+    } else {
+        alert('お使いのブラウザは位置情報サービスをサポートしていません。');
+        document.getElementById('loadingProcess').style.display = 'none';
+        document.getElementById('processAddressesButton').disabled = false;
+    }
+}
         
         // Googleマップの初期化
         function initMap() {
