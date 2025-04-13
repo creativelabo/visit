@@ -227,6 +227,9 @@
         let geocoder;
         let currentPosition = null;
         
+        // ここに追加
+        const GEMINI_API_KEY = 'AIzaSyBjkC1SF_63g6YsEg8bGz5KMQSAqdrA7Lg';
+
         // 初期化処理
         document.addEventListener('DOMContentLoaded', function myFunction() {
             initCamera();
@@ -319,7 +322,7 @@ async function recognizeAddressesWithGemini(imageData) {
         const base64Image = imageData.split(',')[1];
         
         // Gemini APIへのリクエストを準備
-        const apiKey = 'YOUR_GEMINI_API_KEY'; // ← あなたのGemini APIキーを設定
+        const apiKey = GEMINI_API_KEY; 
         const apiUrl = 'https://generativelanguage.googleapis.com/v1/models/gemini-pro-vision:generateContent';
         
         const payload = {
