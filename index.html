@@ -427,81 +427,171 @@
         }
 
         
-        // geocodeAndOptimizeAddresses関数の修正 - 住所のジオコーディングと最適化
-        async function geocodeAndOptimizeAddresses() {
-         try {
-           // currentPositionが未設定の場合、デフォルト値を設定
-           if (!currentPosition) {
+        // 2. geocodeAndOptimizeAddresses 関数の修正 - デバッグ情報強化
+async function geocodeAndOptimizeAddresses() {
+    try {
+        // APIが読み込まれているか確認
+        if (typeof google === 'undefined' || !google.maps) {
+            throw new Error("Google Maps APIが正しく読み込まれていません。");
+        }
+        
+        // currentPositionが未設定の場合、デフォルト値を設定
+        if (!currentPosition) {
             console.log("currentPositionが未設定のため、デフォルト位置を使用します");
             currentPosition = { lat: 35.0116, lng: 135.7681 }; // 京都市中心付近
-            }
+        }
         
-          // 全ての住所を緯度経度に変換
-          const locations = [];
-          for (const address of addresses) {
+        // geocoderの初期化
+        if (!geocoder) {
+            geocoder = new google.maps.Geocoder();
+        }
+        
+        console.log("住所変換を開始します。住所数:", addresses.length);
+        document.getElementById('errorMessage').innerHTML = '';
+        document.getElementById('errorMessage').style.display = 'none';
+        
+        // 全ての住所を緯度経度に変換
+        const locations = [];
+        let successCount = 0;
+        let failCount = 0;
+        
+        for (const address of addresses) {
+            if (!address || address.trim() === '') continue;
+            
             try {
+                console.log(`住所 "${address}" の変換を試みます...`);
                 const location = await geocodeAddress(address);
                 locations.push({
-                ...location,
-                originalAddress: address
+                    ...location,
+                    originalAddress: address
                 });
+                console.log(`住所を変換しました (${successCount + 1}/${addresses.length}): ${address}`);
+                successCount++;
             } catch (error) {
-                console.error(`住所の変換に失敗: ${address}`, error);
-                // エラーでも処理を続行し、変換できた住所だけでルートを計算
+                console.error(`住所の変換に失敗 (${failCount + 1}/${addresses.length}): ${address}`, error);
+                document.getElementById('errorMessage').innerHTML += 
+                    `<div>住所「${address}」の変換に失敗しました: ${error.message}</div>`;
+                document.getElementById('errorMessage').style.display = 'block';
+                failCount++;
+                // エラーでも処理を続行
                 continue;
             }
-          }    
+        }
         
-          if (locations.length === 0) {
-            throw new Error("有効な住所が見つかりませんでした。");
-          }
+        console.log(`住所変換結果: 成功=${successCount}, 失敗=${failCount}`);
         
-          // 最適化されたルートを計算
-          optimizedAddresses = nearestNeighborAlgorithm(currentPosition, locations);
+        if (locations.length === 0) {
+            throw new Error("有効な住所が見つかりませんでした。すべての住所の変換に失敗しました。");
+        }
         
-          // マップを表示
-          document.getElementById('map').style.display = 'block';
+        // 最適化されたルートを計算
+        console.log("ルートを最適化します...");
+        optimizedAddresses = nearestNeighborAlgorithm(currentPosition, locations);
+        console.log("最適化されたルート:", optimizedAddresses);
         
-          // ルートとマーカーを表示
-          displayRoute(currentPosition, optimizedAddresses);
+        // マップを表示
+        document.getElementById('map').style.display = 'block';
         
-          // 最適化された住所リストを表示
-          displayOptimizedAddressList(optimizedAddresses);
+        // ルートとマーカーを表示
+        displayRoute(currentPosition, optimizedAddresses);
         
-          // ステップ3に進む
-          document.getElementById('loadingProcess').style.display = 'none';
-          document.getElementById('processAddressesButton').disabled = false;
-          document.getElementById('step2').classList.add('hidden');
-          document.getElementById('step3').classList.remove('hidden');
+        // 最適化された住所リストを表示
+        displayOptimizedAddressList(optimizedAddresses);
         
-         } catch (error) {
-         console.error("ルート最適化エラー:", error);
-         alert("ルートの最適化中にエラーが発生しました: " + error.message);
-         document.getElementById('loadingProcess').style.display = 'none';
-         document.getElementById('processAddressesButton').disabled = false;
-         }
-        }    
+        // 成功メッセージを表示（一部失敗があっても続行した場合）
+        if (failCount > 0 && successCount > 0) {
+            document.getElementById('errorMessage').innerHTML += 
+                `<div><strong>注意:</strong> ${addresses.length}件中${successCount}件の住所で最適ルートを作成しました。</div>`;
+        }
         
-        // 住所を緯度経度に変換する関数の修正
-       function geocodeAddress(address){
-         return new Promise((resolve, reject) => {
-         if (!geocoder) {
-            geocoder = new google.maps.Geocoder();
+        // ステップ3に進む
+        document.getElementById('loadingProcess').style.display = 'none';
+        document.getElementById('processAddressesButton').disabled = false;
+        document.getElementById('step2').classList.add('hidden');
+        document.getElementById('step3').classList.remove('hidden');
+        
+    } catch (error) {
+        console.error("ルート最適化エラー:", error);
+        document.getElementById('errorMessage').innerHTML = `<strong>エラー:</strong> ${error.message}`;
+        document.getElementById('errorMessage').style.display = 'block';
+        document.getElementById('loadingProcess').style.display = 'none';
+        document.getElementById('processAddressesButton').disabled = false;
+        alert("ルートの最適化中にエラーが発生しました: " + error.message);
+    }
+}
+        
+       // 1. geocodeAddress 関数の修正 - より堅牢な住所変換
+function geocodeAddress(address) {
+    return new Promise((resolve, reject) => {
+        // デバッグ情報
+        console.log(`住所変換開始: "${address}"`);
+        
+        if (!geocoder) {
+            if (typeof google !== 'undefined' && google.maps) {
+                geocoder = new google.maps.Geocoder();
+            } else {
+                console.error("Geocoderが初期化できません: Google Maps APIが読み込まれていません");
+                reject(new Error("Google Maps APIが読み込まれていません"));
+                return;
             }
+        }
         
-          geocoder.geocode({ address: address }, (results, status) => {
+        // 住所の前処理 - 郵便番号があれば分離し、日本の住所であることを明示
+        let processedAddress = address;
+        if (!address.includes('日本')) {
+            processedAddress = address + ", 日本";
+        }
+        
+        // 日本の住所であることを明示し、地域バイアスを設定
+        const geocodingOptions = {
+            address: processedAddress,
+            region: 'jp'
+        };
+        
+        // 住所変換の実行
+        geocoder.geocode(geocodingOptions, (results, status) => {
+            console.log(`Geocoding結果: ${status}`, results);
+            
             if (status === "OK" && results && results.length > 0) {
-                resolve({
+                const location = {
                     lat: results[0].geometry.location.lat(),
                     lng: results[0].geometry.location.lng(),
                     formattedAddress: results[0].formatted_address
-                });
+                };
+                console.log(`住所変換成功: ${address} => ${location.lat}, ${location.lng}`);
+                resolve(location);
             } else {
-                reject(`住所の変換に失敗しました: ${address} (Status: ${status})`);
+                // 変換に失敗した場合、別の方法を試す
+                console.warn(`通常の変換失敗 (${status}): ${address}, 追加オプションで再試行`);
+                
+                // componentRestrictions を追加して再試行
+                const retryOptions = {
+                    address: processedAddress,
+                    region: 'jp',
+                    componentRestrictions: {
+                        country: 'JP'
+                    }
+                };
+                
+                geocoder.geocode(retryOptions, (retryResults, retryStatus) => {
+                    if (retryStatus === "OK" && retryResults && retryResults.length > 0) {
+                        const location = {
+                            lat: retryResults[0].geometry.location.lat(),
+                            lng: retryResults[0].geometry.location.lng(),
+                            formattedAddress: retryResults[0].formatted_address
+                        };
+                        console.log(`再試行で変換成功: ${address} => ${location.lat}, ${location.lng}`);
+                        resolve(location);
+                    } else {
+                        // すべての試行が失敗した場合
+                        console.error(`すべての変換方法が失敗 (${retryStatus}): ${address}`);
+                        reject(new Error(`住所の変換に失敗しました: ${address} (Status: ${retryStatus})`));
+                    }
+                });
             }
-          });
         });
-        }
+    });
+}
         
         // 最近点探索アルゴリズム
         function nearestNeighborAlgorithm(start, locations) {
