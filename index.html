@@ -1,30 +1,91 @@
-// この修正コードでは、以下の問題を解決します：
-// 1. 位置情報許可の問題への対処
-// 2. 最適化ルートの計算ロジックの修正
-// 3. ジオコーディングのエラーハンドリング
-// 4. マップの初期化と表示のフロー改善
+// Google Maps API キー認証と住所変換問題の修正
 
-// geocodeAndOptimizeAddresses関数の修正 - 住所のジオコーディングと最適化
+// 1. Google Maps API キーと読み込み方法の修正
+// スクリプト読み込み部分（HTMLの最後に配置）
+/*
+<script>
+    // グローバル変数
+    let map;
+    let directionsService;
+    let directionsRenderer;
+    let markers = [];
+    let addresses = [];
+    let optimizedAddresses = [];
+    let geocoder;
+    let currentPosition = null;
+    
+    // 初期化処理
+    document.addEventListener('DOMContentLoaded', function() {
+        initCamera();
+        initEventListeners();
+    });
+    
+    // Google マップAPIの読み込み - APIキーの問題を修正
+    function loadGoogleMapsApi() {
+        if (document.getElementById('google-maps-api')) {
+            return;
+        }
+        
+        const script = document.createElement('script');
+        script.id = 'google-maps-api';
+        // ここでAPIキーを正しく設定 - 適切なリファラを設定したAPIキーを使用する
+        script.src = 'https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places&callback=initMap';
+        script.defer = true;
+        script.async = true;
+        document.head.appendChild(script);
+    }
+</script>
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places&callback=handleGoogleMapsApiLoaded"></script>
+*/
+
+// 2. Google Maps API読み込み完了ハンドラー
+function handleGoogleMapsApiLoaded() {
+    console.log("Google Maps API loaded successfully");
+    // APIが読み込まれたフラグを設定
+    window.googleMapsLoaded = true;
+    
+    // 現在のステップに応じた処理
+    if (document.getElementById('step3').classList.contains('visible') || 
+        !document.getElementById('step3').classList.contains('hidden')) {
+        initMap();
+    }
+}
+
+// 3. 住所のジオコーディングと最適化 - APIキーエラー対策
 async function geocodeAndOptimizeAddresses() {
     try {
+        // APIが読み込まれているか確認
+        if (typeof google === 'undefined' || !google.maps) {
+            throw new Error("Google Maps APIが正しく読み込まれていません。");
+        }
+        
         // currentPositionが未設定の場合、デフォルト値を設定
         if (!currentPosition) {
             console.log("currentPositionが未設定のため、デフォルト位置を使用します");
             currentPosition = { lat: 35.0116, lng: 135.7681 }; // 京都市中心付近
         }
         
+        // geocoderの初期化
+        if (!geocoder) {
+            geocoder = new google.maps.Geocoder();
+        }
+        
         // 全ての住所を緯度経度に変換
         const locations = [];
         for (const address of addresses) {
             try {
-                const location = await geocodeAddress(address);
+                // 日本の住所であることを明示してジオコーディング精度を向上
+                const location = await geocodeAddress(address + ", 日本");
                 locations.push({
                     ...location,
                     originalAddress: address
                 });
+                console.log(`住所を変換しました: ${address} => ${location.lat}, ${location.lng}`);
             } catch (error) {
                 console.error(`住所の変換に失敗: ${address}`, error);
                 // エラーでも処理を続行し、変換できた住所だけでルートを計算
+                document.getElementById('errorMessage').innerHTML += `<br>住所「${address}」の変換に失敗しました。`;
+                document.getElementById('errorMessage').style.display = 'block';
                 continue;
             }
         }
@@ -35,6 +96,7 @@ async function geocodeAndOptimizeAddresses() {
         
         // 最適化されたルートを計算
         optimizedAddresses = nearestNeighborAlgorithm(currentPosition, locations);
+        console.log("最適化されたルート:", optimizedAddresses);
         
         // マップを表示
         document.getElementById('map').style.display = 'block';
@@ -54,15 +116,54 @@ async function geocodeAndOptimizeAddresses() {
     } catch (error) {
         console.error("ルート最適化エラー:", error);
         alert("ルートの最適化中にエラーが発生しました: " + error.message);
+        document.getElementById('errorMessage').innerHTML = error.message;
+        document.getElementById('errorMessage').style.display = 'block';
         document.getElementById('loadingProcess').style.display = 'none';
         document.getElementById('processAddressesButton').disabled = false;
     }
 }
 
-// processAddresses関数の修正 - 位置情報取得のエラー処理改善
+// 4. 住所を緯度経度に変換 - エラーハンドリング強化
+function geocodeAddress(address) {
+    return new Promise((resolve, reject) => {
+        if (!geocoder) {
+            if (typeof google !== 'undefined' && google.maps) {
+                geocoder = new google.maps.Geocoder();
+            } else {
+                reject(new Error("Google Maps APIが読み込まれていません"));
+                return;
+            }
+        }
+        
+        // 日本の住所であることを明示し、地域バイアスを設定
+        const geocodingOptions = {
+            address: address,
+            region: 'jp',
+            componentRestrictions: {
+                country: 'JP'
+            }
+        };
+        
+        geocoder.geocode(geocodingOptions, (results, status) => {
+            if (status === "OK" && results && results.length > 0) {
+                resolve({
+                    lat: results[0].geometry.location.lat(),
+                    lng: results[0].geometry.location.lng(),
+                    formattedAddress: results[0].formatted_address
+                });
+            } else {
+                console.error(`Geocoding失敗 (${status}):`, address);
+                reject(new Error(`住所の変換に失敗しました: ${address} (Status: ${status})`));
+            }
+        });
+    });
+}
+
+// 5. 位置情報取得のタイムアウト対応
 function processAddresses() {
     document.getElementById('loadingProcess').style.display = 'block';
     document.getElementById('processAddressesButton').disabled = true;
+    document.getElementById('errorMessage').style.display = 'none';
     
     // 入力された住所を取得
     const addressText = document.getElementById('addressesTextarea').value.trim();
@@ -78,12 +179,23 @@ function processAddresses() {
     
     // デフォルト位置を設定 (京都市中心付近)
     currentPosition = { lat: 35.0116, lng: 135.7681 };
+    console.log("デフォルト位置を設定:", currentPosition);
     
+    // 位置情報取得 - タイムアウト時間を10秒に延長
     if (navigator.geolocation) {
-        const positionPromise = new Promise((resolve, reject) => {
+        const positionPromise = new Promise((resolve) => {
+            const locationTimeout = setTimeout(() => {
+                console.log("位置情報取得がタイムアウトしました。デフォルト位置を使用します。");
+                document.getElementById('errorMessage').innerHTML = 
+                    '位置情報の取得がタイムアウトしました。デフォルト位置（京都市中心）を使用します。';
+                document.getElementById('errorMessage').style.display = 'block';
+                resolve(currentPosition);
+            }, 10000); // 10秒タイムアウト
+            
             navigator.geolocation.getCurrentPosition(
                 // 成功時
                 function(position) {
+                    clearTimeout(locationTimeout);
                     currentPosition = {
                         lat: position.coords.latitude,
                         lng: position.coords.longitude
@@ -93,6 +205,7 @@ function processAddresses() {
                 },
                 // エラー時
                 function(error) {
+                    clearTimeout(locationTimeout);
                     console.error('位置情報の取得に失敗しました:', error);
                     console.log("デフォルト位置を使用します:", currentPosition);
                     
@@ -100,29 +213,28 @@ function processAddresses() {
                     let errorMessage = "";
                     switch(error.code) {
                         case error.PERMISSION_DENIED:
-                            errorMessage = "位置情報へのアクセスが拒否されました。デフォルトの位置情報を使用します。";
+                            errorMessage = "位置情報へのアクセスが拒否されました。";
                             break;
                         case error.POSITION_UNAVAILABLE:
-                            errorMessage = "位置情報が利用できません。デフォルトの位置情報を使用します。";
+                            errorMessage = "位置情報が利用できません。";
                             break;
                         case error.TIMEOUT:
-                            errorMessage = "位置情報の取得がタイムアウトしました。デフォルトの位置情報を使用します。";
+                            errorMessage = "位置情報の取得がタイムアウトしました。";
                             break;
                         default:
-                            errorMessage = "位置情報の取得中にエラーが発生しました。デフォルトの位置情報を使用します。";
+                            errorMessage = "位置情報の取得中にエラーが発生しました。";
                             break;
                     }
                     
                     document.getElementById('errorMessage').innerHTML = 
-                        '位置情報が許可されていないため、京都市中心をデフォルト位置として使用します。';
+                        errorMessage + ' デフォルト位置（京都市中心）を使用します。';
                     document.getElementById('errorMessage').style.display = 'block';
                     
-                    // デフォルト位置でも続行
                     resolve(currentPosition);
                 },
                 {
                     enableHighAccuracy: true,
-                    timeout: 5000,
+                    timeout: 10000, // 10秒タイムアウト
                     maximumAge: 0
                 }
             );
@@ -141,6 +253,9 @@ function processAddresses() {
         });
     } else {
         alert('お使いのブラウザは位置情報サービスをサポートしていません。デフォルトの位置情報を使用します。');
+        document.getElementById('errorMessage').innerHTML = 
+            'お使いのブラウザは位置情報サービスをサポートしていません。デフォルト位置（京都市中心）を使用します。';
+        document.getElementById('errorMessage').style.display = 'block';
         
         // Google Mapsの初期化（デフォルト位置で）
         if (typeof google !== 'undefined' && google.maps) {
@@ -151,54 +266,7 @@ function processAddresses() {
     }
 }
 
-// initMap関数の修正 - マップの初期化と地図表示処理の改善
-function initMap() {
-    console.log("Initializing map with position:", currentPosition);
-    
-    // マップのコンテナが表示されていることを確認
-    document.getElementById('map').style.display = 'block';
-    
-    // マップの初期化
-    map = new google.maps.Map(document.getElementById('map'), {
-        zoom: 12,
-        center: currentPosition || { lat: 35.0116, lng: 135.7681 } // 京都市中心のデフォルト位置
-    });
-    
-    // Directions API
-    directionsService = new google.maps.DirectionsService();
-    directionsRenderer = new google.maps.DirectionsRenderer({
-        map: map,
-        suppressMarkers: true
-    });
-    
-    geocoder = new google.maps.Geocoder();
-    
-    // 住所のジオコーディングと最適化
-    geocodeAndOptimizeAddresses();
-}
-
-// 住所を緯度経度に変換する関数の修正
-function geocodeAddress(address) {
-    return new Promise((resolve, reject) => {
-        if (!geocoder) {
-            geocoder = new google.maps.Geocoder();
-        }
-        
-        geocoder.geocode({ address: address }, (results, status) => {
-            if (status === "OK" && results && results.length > 0) {
-                resolve({
-                    lat: results[0].geometry.location.lat(),
-                    lng: results[0].geometry.location.lng(),
-                    formattedAddress: results[0].formatted_address
-                });
-            } else {
-                reject(`住所の変換に失敗しました: ${address} (Status: ${status})`);
-            }
-        });
-    });
-}
-
-// ルートとマーカーを表示する関数の修正
+// 6. 最適ルート計算と表示処理の改善
 function displayRoute(start, optimizedLocations) {
     if (!start || !optimizedLocations || optimizedLocations.length === 0) {
         console.error('ルート表示に必要なデータがありません', { start, locationsCount: optimizedLocations ? optimizedLocations.length : 0 });
@@ -254,7 +322,9 @@ function displayRoute(start, optimizedLocations) {
     
     // Google Maps Directions APIでルートを表示
     try {
-        const waypoints = optimizedLocations.slice(0, -1).map(location => ({
+        // 最大8か所までに制限（Directions APIの制限）
+        const maxWaypoints = Math.min(optimizedLocations.length - 1, 7); // 目的地を除いて最大7ウェイポイント
+        const waypoints = optimizedLocations.slice(0, maxWaypoints).map(location => ({
             location: new google.maps.LatLng(location.lat, location.lng),
             stopover: true
         }));
@@ -275,6 +345,8 @@ function displayRoute(start, optimizedLocations) {
                 directionsRenderer.setDirections(result);
             } else {
                 console.error("ルート計算エラー:", status);
+                document.getElementById('errorMessage').innerHTML = `ルート計算エラー: ${status}。マーカーのみ表示します。`;
+                document.getElementById('errorMessage').style.display = 'block';
                 // ルート計算に失敗した場合でもマーカーは表示されるので、
                 // 地図の表示領域を調整
                 fitMapToMarkers();
@@ -282,80 +354,29 @@ function displayRoute(start, optimizedLocations) {
         });
     } catch (error) {
         console.error("ルート表示エラー:", error);
+        document.getElementById('errorMessage').innerHTML = `ルート表示エラー: ${error.message}。マーカーのみ表示します。`;
+        document.getElementById('errorMessage').style.display = 'block';
         fitMapToMarkers();
     }
 }
 
-// マーカーをクリア
-function clearMarkers() {
-    for (let i = 0; i < markers.length; i++) {
-        markers[i].setMap(null);
-    }
-    markers = [];
-}
+// 7. Google マップAPIキーの修正方法
+/*
+重要: Google Maps APIキーの問題を修正するには、以下の手順を実施してください:
 
-// 地図の表示領域をマーカーに合わせる
-function fitMapToMarkers() {
-    if (markers.length === 0) return;
-    
-    const bounds = new google.maps.LatLngBounds();
-    for (let i = 0; i < markers.length; i++) {
-        bounds.extend(markers[i].getPosition());
-    }
-    map.fitBounds(bounds);
-}
-
-// Google マップAPIの読み込み関数の修正
-function loadGoogleMapsApi() {
-    if (document.getElementById('google-maps-api')) {
-        // APIスクリプトが既に読み込まれている場合は再読み込みしない
-        initMap();
-        return;
-    }
-    
-    const script = document.createElement('script');
-    script.id = 'google-maps-api';
-    script.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyAg27IKRj6lWefypqphZ-RRYcZWX-bMscw&callback=initMap';
-    script.defer = true;
-    script.async = true;
-    document.head.appendChild(script);
-}
-
-// 撮影機能の修正
-function captureImage() {
-    const videoElement = document.getElementById('videoElement');
-    const canvas = document.createElement('canvas');
-    const capturedImage = document.getElementById('capturedImage');
-    
-    // 撮影中の表示
-    document.getElementById('loadingCapture').style.display = 'block';
-    document.getElementById('captureButton').disabled = true;
-    
-    // キャンバスに現在のビデオフレームを描画
-    canvas.width = videoElement.videoWidth;
-    canvas.height = videoElement.videoHeight;
-    canvas.getContext('2d').drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-    
-    // 画像データをBase64形式で取得
-    const imageData = canvas.toDataURL('image/jpeg');
-    capturedImage.src = imageData;
-    capturedImage.style.display = 'block';
-    
-    // 実際のAI処理はここに追加（このサンプルではモックデータを使用）
-    setTimeout(() => {
-        const mockRecognizedAddresses = [
-            "京都市北区上賀茂豊田町３５－１",
-            "京都市北区上賀茂前田町２２",
-            "京都市右京区嵯峨天竜寺造路町６－２",
-            "京都市東山区本町１８丁目"
-        ].join('\n');
-        
-        document.getElementById('addressesTextarea').value = mockRecognizedAddresses;
-        document.getElementById('loadingCapture').style.display = 'none';
-        document.getElementById('captureButton').disabled = false;
-        
-        // ステップ2に進む
-        document.getElementById('step1').classList.add('hidden');
-        document.getElementById('step2').classList.remove('hidden');
-    }, 2000);
-}
+1. Google Cloud Platformコンソール(https://console.cloud.google.com/)にアクセス
+2. プロジェクトを選択または新規作成
+3. APIとサービス > 認証情報 を選択
+4. API キーを作成 をクリック
+5. 制限を設定:
+   - アプリケーションの制限: HTTP リファラー
+   - ウェブサイトの制限: アプリをホストするドメインを追加（開発中は localhost を含む）
+   - API制限: 以下のAPIのみに制限
+     - Maps JavaScript API
+     - Geocoding API
+     - Directions API
+     - Places API（必要な場合）
+6. 作成したキーを以下の場所に反映:
+   - HTML内のAPIキー部分すべて
+   - JavaScriptのloadGoogleMapsApi関数内
+*/
