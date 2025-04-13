@@ -304,18 +304,27 @@ async function captureImage() {
         capturedImage.src = imageData;
         capturedImage.style.display = 'block';
         
-        console.log("画像を撮影しました。モックデータを使用します...");
+        // 本番環境設定 - デバッグモードを切り替え
+        const useDebugMode = false; // 本番環境の場合はfalse、テスト時はtrue
         
-        // モックデータを使用（API呼び出しはスキップ）
-        const mockAddresses = [
-            "京都市北区上賀茂豊田町３５－１",
-            "京都市北区上賀茂前田町２２",
-            "京都市右京区嵯峨天竜寺造路町６－２",
-            "京都市東山区本町１８丁目"
-        ];
+        let recognizedAddresses;
+        if (useDebugMode) {
+            console.log("画像を撮影しました。デバッグモードでモックデータを使用します...");
+            // モックデータ
+            recognizedAddresses = [
+                "京都市北区上賀茂豊田町３５－１",
+                "京都市北区上賀茂前田町２２",
+                "京都市右京区嵯峨天竜寺造路町６－２",
+                "京都市東山区本町１８丁目"
+            ];
+        } else {
+            // 実際のGemini API呼び出し
+            console.log("画像を撮影しました。Gemini APIで住所を認識します...");
+            recognizedAddresses = await recognizeAddressesWithGemini(imageData);
+        }
         
         // 認識された住所をテキストエリアに表示
-        document.getElementById('addressesTextarea').value = mockAddresses.join('\n');
+        document.getElementById('addressesTextarea').value = recognizedAddresses.join('\n');
         
         // 処理完了
         document.getElementById('loadingCapture').style.display = 'none';
