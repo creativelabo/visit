@@ -234,21 +234,21 @@
         });
         
         // カメラの初期化
-async function initCamera() {
-    const videoElement = document.getElementById('videoElement');
+        async function initCamera() {
+        const videoElement = document.getElementById('videoElement');
     
-    try {
+        try {
         const stream = await navigator.mediaDevices.getUserMedia({ 
             video: { facingMode: 'environment' },
             audio: false 
         });
         videoElement.srcObject = stream;
-    } catch (error) {
+        } catch (error) {
         console.error('カメラの初期化に失敗しました:', error);
         document.getElementById('errorMessage').textContent = 'カメラにアクセスできませんでした。カメラの使用を許可してください。';
         document.getElementById('errorMessage').style.display = 'block';
-    }
-}
+         }
+        }
         
         // イベントリスナーの初期化
         function initEventListeners() {
@@ -269,27 +269,27 @@ async function initCamera() {
         }
         
         // 撮影機能の修正
-function captureImage() {
-    const videoElement = document.getElementById('videoElement');
-    const canvas = document.createElement('canvas');
-    const capturedImage = document.getElementById('capturedImage');
+        function captureImage() {
+        const videoElement = document.getElementById('videoElement');
+        const canvas = document.createElement('canvas');
+        const capturedImage = document.getElementById('capturedImage');
     
-    // 撮影中の表示
-    document.getElementById('loadingCapture').style.display = 'block';
-    document.getElementById('captureButton').disabled = true;
+        // 撮影中の表示
+        document.getElementById('loadingCapture').style.display = 'block';
+        document.getElementById('captureButton').disabled = true;
     
-    // キャンバスに現在のビデオフレームを描画
-    canvas.width = videoElement.videoWidth;
-    canvas.height = videoElement.videoHeight;
-    canvas.getContext('2d').drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        // キャンバスに現在のビデオフレームを描画
+        canvas.width = videoElement.videoWidth;
+        canvas.height = videoElement.videoHeight;
+        canvas.getContext('2d').drawImage(videoElement, 0, 0, canvas.width, canvas.height);
     
-    // 画像データをBase64形式で取得
-    const imageData = canvas.toDataURL('image/jpeg');
-    capturedImage.src = imageData;
-    capturedImage.style.display = 'block';
+        // 画像データをBase64形式で取得
+        const imageData = canvas.toDataURL('image/jpeg');
+        capturedImage.src = imageData;
+        capturedImage.style.display = 'block';
     
-    // 実際のAI処理はここに追加（このサンプルではモックデータを使用）
-    setTimeout(() => {
+        // 実際のAI処理はここに追加（このサンプルではモックデータを使用）
+        setTimeout(() => {
         const mockRecognizedAddresses = [
             "京都市北区上賀茂豊田町３５－１",
             "京都市北区上賀茂前田町２２",
@@ -304,191 +304,192 @@ function captureImage() {
         // ステップ2に進む
         document.getElementById('step1').classList.add('hidden');
         document.getElementById('step2').classList.remove('hidden');
-    }, 2000);
-}
+        }, 2000);
+        }
         
         // processAddresses関数の修正 - 位置情報取得のエラー処理改善
-function processAddresses() {
-    document.getElementById('loadingProcess').style.display = 'block';
-    document.getElementById('processAddressesButton').disabled = true;
+        function processAddresses() {
+        document.getElementById('loadingProcess').style.display = 'block';
+        document.getElementById('processAddressesButton').disabled = true;
     
-    // 入力された住所を取得
-    const addressText = document.getElementById('addressesTextarea').value.trim();
-    if (!addressText) {
-        alert("住所を入力してください");
-        document.getElementById('loadingProcess').style.display = 'none';
-        document.getElementById('processAddressesButton').disabled = false;
-        return;
-    }
+         // 入力された住所を取得
+         const addressText = document.getElementById('addressesTextarea').value.trim();
+         if (!addressText) {
+         alert("住所を入力してください");
+         document.getElementById('loadingProcess').style.display = 'none';
+         document.getElementById('processAddressesButton').disabled = false;
+         return;
+         }
     
-    // 住所をリスト化
-    addresses = addressText.split('\n').filter(address => address.trim() !== "");
+         // 住所をリスト化
+         addresses = addressText.split('\n').filter(address => address.trim() !== "");
     
-    // デフォルト位置を設定 (京都市中心付近)
-    currentPosition = { lat: 35.0116, lng: 135.7681 };
+         // デフォルト位置を設定 (京都市中心付近)
+         currentPosition = { lat: 35.0116, lng: 135.7681 };
     
-    if (navigator.geolocation) {
-        const positionPromise = new Promise((resolve, reject) => {
+         if (navigator.geolocation) {
+         const positionPromise = new Promise((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(
                 // 成功時
                 function(position) {
-                    currentPosition = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude
-                    };
-                    console.log("現在位置を取得しました:", currentPosition);
-                    resolve(currentPosition);
+                currentPosition = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+                };
+                console.log("現在位置を取得しました:", currentPosition);
+                resolve(currentPosition);
                 },
                 // エラー時
                 function(error) {
-                    console.error('位置情報の取得に失敗しました:', error);
-                    console.log("デフォルト位置を使用します:", currentPosition);
+                console.error('位置情報の取得に失敗しました:', error);
+                console.log("デフォルト位置を使用します:", currentPosition);
                     
-                    // エラーメッセージ表示
-                    let errorMessage = "";
-                    switch(error.code) {
-                        case error.PERMISSION_DENIED:
-                            errorMessage = "位置情報へのアクセスが拒否されました。デフォルトの位置情報を使用します。";
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            errorMessage = "位置情報が利用できません。デフォルトの位置情報を使用します。";
-                            break;
-                        case error.TIMEOUT:
-                            errorMessage = "位置情報の取得がタイムアウトしました。デフォルトの位置情報を使用します。";
-                            break;
-                        default:
-                            errorMessage = "位置情報の取得中にエラーが発生しました。デフォルトの位置情報を使用します。";
-                            break;
-                    }
+                // エラーメッセージ表示
+                let errorMessage = "";
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                    errorMessage = "位置情報へのアクセスが拒否されました。デフォルトの位置情報を使用します。";
+                    break;
+                    case error.POSITION_UNAVAILABLE:
+                    errorMessage = "位置情報が利用できません。デフォルトの位置情報を使用します。";
+                    break;
+                    case error.TIMEOUT:
+                    errorMessage = "位置情報の取得がタイムアウトしました。デフォルトの位置情報を使用します。";
+                    break;
+                    default:
+                    errorMessage = "位置情報の取得中にエラーが発生しました。デフォルトの位置情報を使用します。";
+                    break;
+                }
                     
-                    document.getElementById('errorMessage').innerHTML = 
-                        '位置情報が許可されていないため、京都市中心をデフォルト位置として使用します。';
-                    document.getElementById('errorMessage').style.display = 'block';
+                document.getElementById('errorMessage').innerHTML = 
+                '位置情報が許可されていないため、京都市中心をデフォルト位置として使用します。';
+                document.getElementById('errorMessage').style.display = 'block';
                     
-                    // デフォルト位置でも続行
-                    resolve(currentPosition);
+                // デフォルト位置でも続行
+                resolve(currentPosition);
                 },
                 {
-                    enableHighAccuracy: true,
-                    timeout: 5000,
-                    maximumAge: 0
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 0
                 }
             );
-        });
+          });
         
-        // 位置情報の処理が完了したらGoogle Mapsを初期化
-        positionPromise.then(() => {
-            // Google Mapsの初期化と住所の処理
+          // 位置情報の処理が完了したらGoogle Mapsを初期化
+          positionPromise.then(() => {
+          // Google Mapsの初期化と住所の処理
             if (typeof google !== 'undefined' && google.maps) {
-                // Google Maps APIが既に読み込まれている場合
-                initMap();
-            } else {
-                // APIがまだ読み込まれていない場合、読み込んでから初期化
-                loadGoogleMapsApi();
-            }
-        });
-    } else {
-        alert('お使いのブラウザは位置情報サービスをサポートしていません。デフォルトの位置情報を使用します。');
-        
-        // Google Mapsの初期化（デフォルト位置で）
-        if (typeof google !== 'undefined' && google.maps) {
+            // Google Maps APIが既に読み込まれている場合
             initMap();
-        } else {
+            } else {
+            // APIがまだ読み込まれていない場合、読み込んでから初期化
             loadGoogleMapsApi();
-        }
-    }
-}
+            }
+          });
+
+         } else {
+         alert('お使いのブラウザは位置情報サービスをサポートしていません。デフォルトの位置情報を使用します。');
         
-        // initMap関数の修正 - マップの初期化と地図表示処理の改善
-function initMap() {
-    console.log("Initializing map with position:", currentPosition);
+         // Google Mapsの初期化（デフォルト位置で）
+         if (typeof google !== 'undefined' && google.maps) {
+            initMap();
+          } else {
+            loadGoogleMapsApi();
+          }
+         }
+        }
+        
+       // initMap関数の修正 - マップの初期化と地図表示処理の改善
+       function initMap() {
+         console.log("Initializing map with position:", currentPosition);
     
-    // マップのコンテナが表示されていることを確認
-    document.getElementById('map').style.display = 'block';
+         // マップのコンテナが表示されていることを確認
+         document.getElementById('map').style.display = 'block';
     
-    // マップの初期化
-    map = new google.maps.Map(document.getElementById('map'), {
-        zoom: 12,
-        center: currentPosition || { lat: 35.0116, lng: 135.7681 } // 京都市中心のデフォルト位置
-    });
+         // マップの初期化
+         map = new google.maps.Map(document.getElementById('map'), {
+         zoom: 12,
+         center: currentPosition || { lat: 35.0116, lng: 135.7681 } // 京都市中心のデフォルト位置
+         });
     
-    // Directions API
-    directionsService = new google.maps.DirectionsService();
-    directionsRenderer = new google.maps.DirectionsRenderer({
-        map: map,
-        suppressMarkers: true
-    });
+         // Directions API
+         directionsService = new google.maps.DirectionsService();
+         directionsRenderer = new google.maps.DirectionsRenderer({
+         map: map,
+         suppressMarkers: true
+         });
     
-    geocoder = new google.maps.Geocoder();
+         geocoder = new google.maps.Geocoder();
     
-    // 住所のジオコーディングと最適化
-    geocodeAndOptimizeAddresses();
-}
+         // 住所のジオコーディングと最適化
+         geocodeAndOptimizeAddresses();
+        }
 
         
         // geocodeAndOptimizeAddresses関数の修正 - 住所のジオコーディングと最適化
-async function geocodeAndOptimizeAddresses() {
-    try {
-        // currentPositionが未設定の場合、デフォルト値を設定
-        if (!currentPosition) {
+        async function geocodeAndOptimizeAddresses() {
+         try {
+           // currentPositionが未設定の場合、デフォルト値を設定
+           if (!currentPosition) {
             console.log("currentPositionが未設定のため、デフォルト位置を使用します");
             currentPosition = { lat: 35.0116, lng: 135.7681 }; // 京都市中心付近
-        }
+            }
         
-        // 全ての住所を緯度経度に変換
-        const locations = [];
-        for (const address of addresses) {
+          // 全ての住所を緯度経度に変換
+          const locations = [];
+          for (const address of addresses) {
             try {
                 const location = await geocodeAddress(address);
                 locations.push({
-                    ...location,
-                    originalAddress: address
+                ...location,
+                originalAddress: address
                 });
             } catch (error) {
                 console.error(`住所の変換に失敗: ${address}`, error);
                 // エラーでも処理を続行し、変換できた住所だけでルートを計算
                 continue;
             }
-        }
+          }    
         
-        if (locations.length === 0) {
+          if (locations.length === 0) {
             throw new Error("有効な住所が見つかりませんでした。");
-        }
+          }
         
-        // 最適化されたルートを計算
-        optimizedAddresses = nearestNeighborAlgorithm(currentPosition, locations);
+          // 最適化されたルートを計算
+          optimizedAddresses = nearestNeighborAlgorithm(currentPosition, locations);
         
-        // マップを表示
-        document.getElementById('map').style.display = 'block';
+          // マップを表示
+          document.getElementById('map').style.display = 'block';
         
-        // ルートとマーカーを表示
-        displayRoute(currentPosition, optimizedAddresses);
+          // ルートとマーカーを表示
+          displayRoute(currentPosition, optimizedAddresses);
         
-        // 最適化された住所リストを表示
-        displayOptimizedAddressList(optimizedAddresses);
+          // 最適化された住所リストを表示
+          displayOptimizedAddressList(optimizedAddresses);
         
-        // ステップ3に進む
-        document.getElementById('loadingProcess').style.display = 'none';
-        document.getElementById('processAddressesButton').disabled = false;
-        document.getElementById('step2').classList.add('hidden');
-        document.getElementById('step3').classList.remove('hidden');
+          // ステップ3に進む
+          document.getElementById('loadingProcess').style.display = 'none';
+          document.getElementById('processAddressesButton').disabled = false;
+          document.getElementById('step2').classList.add('hidden');
+          document.getElementById('step3').classList.remove('hidden');
         
-    } catch (error) {
-        console.error("ルート最適化エラー:", error);
-        alert("ルートの最適化中にエラーが発生しました: " + error.message);
-        document.getElementById('loadingProcess').style.display = 'none';
-        document.getElementById('processAddressesButton').disabled = false;
-    }
-}
+         } catch (error) {
+         console.error("ルート最適化エラー:", error);
+         alert("ルートの最適化中にエラーが発生しました: " + error.message);
+         document.getElementById('loadingProcess').style.display = 'none';
+         document.getElementById('processAddressesButton').disabled = false;
+         }
+        }    
         
         // 住所を緯度経度に変換する関数の修正
-function geocodeAddress(address) {
-    return new Promise((resolve, reject) => {
-        if (!geocoder) {
+       function geocodeAddress(address){
+         return new Promise((resolve, reject) => {
+         if (!geocoder) {
             geocoder = new google.maps.Geocoder();
-        }
+            }
         
-        geocoder.geocode({ address: address }, (results, status) => {
+          geocoder.geocode({ address: address }, (results, status) => {
             if (status === "OK" && results && results.length > 0) {
                 resolve({
                     lat: results[0].geometry.location.lat(),
@@ -498,9 +499,9 @@ function geocodeAddress(address) {
             } else {
                 reject(`住所の変換に失敗しました: ${address} (Status: ${status})`);
             }
+          });
         });
-    });
-}
+        }
         
         // 最近点探索アルゴリズム
         function nearestNeighborAlgorithm(start, locations) {
@@ -562,33 +563,33 @@ function geocodeAddress(address) {
         }
         
         // ルートとマーカーを表示する関数の修正
-function displayRoute(start, optimizedLocations) {
-    if (!start || !optimizedLocations || optimizedLocations.length === 0) {
-        console.error('ルート表示に必要なデータがありません', { start, locationsCount: optimizedLocations ? optimizedLocations.length : 0 });
-        return;
-    }
+        function displayRoute(start, optimizedLocations) {
+         if (!start || !optimizedLocations || optimizedLocations.length === 0) {
+         console.error('ルート表示に必要なデータがありません', { start, locationsCount: optimizedLocations ? optimizedLocations.length : 0 });
+         return;
+         }
     
-    // マーカーをクリア
-    clearMarkers();
+         // マーカーをクリア
+         clearMarkers();
     
-    // 現在地のマーカー
-    const startMarker = new google.maps.Marker({
-        position: start,
-        map: map,
-        icon: {
+         // 現在地のマーカー
+         const startMarker = new google.maps.Marker({
+         position: start,
+         map: map,
+         icon: {
             path: google.maps.SymbolPath.CIRCLE,
             fillColor: "#0f9d58",
             fillOpacity: 1,
             strokeWeight: 0,
             scale: 12
-        },
-        title: "現在地"
-    });
-    markers.push(startMarker);
+          },
+         title: "現在地"
+         });
+         markers.push(startMarker);
     
-    // 訪問先マーカー
-    for (let i = 0; i < optimizedLocations.length; i++) {
-        const marker = new google.maps.Marker({
+         // 訪問先マーカー
+         for (let i = 0; i < optimizedLocations.length; i++) {
+          const marker = new google.maps.Marker({
             position: { lat: optimizedLocations[i].lat, lng: optimizedLocations[i].lng },
             map: map,
             label: {
@@ -603,26 +604,26 @@ function displayRoute(start, optimizedLocations) {
                 scale: 12
             },
             title: optimizedLocations[i].formattedAddress || optimizedLocations[i].originalAddress
-        });
+          });
         
-        markers.push(marker);
-    }
+           markers.push(marker);
+         }
     
-    // ルートが1か所しかない場合はDirections APIを使わず、地図の中心と拡大率だけ調整
-    if (optimizedLocations.length === 1) {
-        map.setCenter(optimizedLocations[0]);
-        map.setZoom(14);
-        return;
-    }
+         // ルートが1か所しかない場合はDirections APIを使わず、地図の中心と拡大率だけ調整
+         if (optimizedLocations.length === 1) {
+         map.setCenter(optimizedLocations[0]);
+         map.setZoom(14);
+         return;
+         }
     
-    // Google Maps Directions APIでルートを表示
-    try {
-        const waypoints = optimizedLocations.slice(0, -1).map(location => ({
+         // Google Maps Directions APIでルートを表示
+         try {
+          const waypoints = optimizedLocations.slice(0, -1).map(location => ({
             location: new google.maps.LatLng(location.lat, location.lng),
             stopover: true
-        }));
+            }));
         
-        const request = {
+            const request = {
             origin: new google.maps.LatLng(start.lat, start.lng),
             destination: new google.maps.LatLng(
                 optimizedLocations[optimizedLocations.length - 1].lat, 
@@ -631,23 +632,23 @@ function displayRoute(start, optimizedLocations) {
             waypoints: waypoints,
             optimizeWaypoints: false,
             travelMode: google.maps.TravelMode.DRIVING
-        };
+            };
         
-        directionsService.route(request, (result, status) => {
+            directionsService.route(request, (result, status) => {
             if (status === "OK") {
                 directionsRenderer.setDirections(result);
-            } else {
+              } else {
                 console.error("ルート計算エラー:", status);
                 // ルート計算に失敗した場合でもマーカーは表示されるので、
                 // 地図の表示領域を調整
                 fitMapToMarkers();
-            }
-        });
-    } catch (error) {
-        console.error("ルート表示エラー:", error);
-        fitMapToMarkers();
-    }
-}
+              }
+            });
+         } catch (error) {
+           console.error("ルート表示エラー:", error);
+           fitMapToMarkers();
+         }
+        }
         
         // 最適化された住所リストを表示
         function displayOptimizedAddressList(optimizedLocations) {
@@ -699,42 +700,42 @@ function displayRoute(start, optimizedLocations) {
             window.open(url, '_blank');
         }
         
-        // Google マップAPIの読み込み関数の修正
-function loadGoogleMapsApi() {
-    if (document.getElementById('google-maps-api')) {
+     // Google マップAPIの読み込み関数の修正
+     function loadGoogleMapsApi() {
+        if (document.getElementById('google-maps-api')) {
         // APIスクリプトが既に読み込まれている場合は再読み込みしない
         initMap();
         return;
-    }
+        }
     
-    const script = document.createElement('script');
-    script.id = 'google-maps-api';
-    script.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyAg27IKRj6lWefypqphZ-RRYcZWX-bMscw&callback=initMap';
-    script.defer = true;
-    script.async = true;
-    document.head.appendChild(script);
-}
+     const script = document.createElement('script');
+     script.id = 'google-maps-api';
+     script.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyAg27IKRj6lWefypqphZ-RRYcZWX-bMscw&callback=initMap';
+     script.defer = true;
+     script.async = true;
+     document.head.appendChild(script);
+     }
 
-        // マーカーをクリア
-function clearMarkers() {
-    for (let i = 0; i < markers.length; i++) {
+     // マーカーをクリア
+     function clearMarkers() { 
+     for (let i = 0; i < markers.length; i++) {
         markers[i].setMap(null);
-    }
-    markers = [];
-}
+     }
+     markers = [];
+     }
 
-// 地図の表示領域をマーカーに合わせる
-function fitMapToMarkers() {
-    if (markers.length === 0) return;
+     // 地図の表示領域をマーカーに合わせる
+     function fitMapToMarkers() {
+     if (markers.length === 0) return;
     
-    const bounds = new google.maps.LatLngBounds();
-    for (let i = 0; i < markers.length; i++) {
-        bounds.extend(markers[i].getPosition());
-    }
-    map.fitBounds(bounds);
-}
+     const bounds = new google.maps.LatLngBounds();
+     for (let i = 0; i < markers.length; i++) {
+     bounds.extend(markers[i].getPosition());
+     }
+     map.fitBounds(bounds);
+     }
 
     </script>
-    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAg27IKRj6lWefypqphZ-RRYcZWX-bMscw&callback=initMap"></script>
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAg27IKRj6lWefypqphZ-RRYcZWX-bMscw&callback=initMap"></script>
 </body>
 </html>
