@@ -348,9 +348,10 @@ function fitMapToMarkers() {
 });
 
 // カメラの初期化
+// カメラの初期化
 async function initCamera() {
     const videoElement = document.getElementById('videoElement');
-    
+
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ 
             video: { facingMode: 'environment' },
