@@ -230,11 +230,18 @@
         // ここに追加
         const GEMINI_API_KEY = 'AIzaSyBjkC1SF_63g6YsEg8bGz5KMQSAqdrA7Lg';
 
-        // 初期化処理
-        document.addEventListener('DOMContentLoaded', function myFunction() {
-            initCamera();
-            initEventListeners();
-        });
+        // 初期化処理の修正
+document.addEventListener('DOMContentLoaded', function() {
+    // エラーメッセージを非表示に
+    const errorElements = document.querySelectorAll('#errorMessage');
+    errorElements.forEach(el => {
+        el.style.display = 'none';
+    });
+    
+    // 通常の初期化処理を実行
+    initCamera();
+    initEventListeners();
+});
         
         // カメラの初期化
         async function initCamera() {
@@ -272,7 +279,7 @@
         }
         
         // 1. 画像を撮影してAI処理する関数
-async function captureImage() {
+        async function captureImage() {
     const videoElement = document.getElementById('videoElement');
     const canvas = document.createElement('canvas');
     const capturedImage = document.getElementById('capturedImage');
@@ -292,8 +299,14 @@ async function captureImage() {
         capturedImage.src = imageData;
         capturedImage.style.display = 'block';
         
-        // 画像をAIに送信して住所を認識
-        const recognizedAddresses = await recognizeAddressesWithGemini(imageData);
+        // APIを呼び出す代わりに直接モックデータを使用 (開発中)
+        // const recognizedAddresses = await recognizeAddressesWithGemini(imageData);
+        const recognizedAddresses = [
+            "京都市北区上賀茂豊田町３５－１",
+            "京都市北区上賀茂前田町２２",
+            "京都市右京区嵯峨天竜寺造路町６－２",
+            "京都市東山区本町１８丁目"
+        ];
         
         // 認識された住所をテキストエリアに表示
         document.getElementById('addressesTextarea').value = recognizedAddresses.join('\n');
@@ -306,11 +319,10 @@ async function captureImage() {
         document.getElementById('step1').classList.add('hidden');
         document.getElementById('step2').classList.remove('hidden');
     } catch (error) {
-        console.error('画像認識エラー:', error);
-        alert('画像認識中にエラーが発生しました: ' + error.message);
+        console.error('画像処理エラー:', error);
         document.getElementById('loadingCapture').style.display = 'none';
         document.getElementById('captureButton').disabled = false;
-        document.getElementById('errorMessage').innerHTML = '画像認識中にエラーが発生しました: ' + error.message;
+        document.getElementById('errorMessage').innerHTML = '画像処理中にエラーが発生しました: ' + error.message;
         document.getElementById('errorMessage').style.display = 'block';
     }
 }
