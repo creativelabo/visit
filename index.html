@@ -218,7 +218,6 @@
 
     <script>
         // グローバル変数
-        // グローバル変数
 let map;
 let directionsService;
 let directionsRenderer;
@@ -229,7 +228,7 @@ let geocoder;
 let currentPosition = null;
 let mapInitialized = false; // マップ初期化状態を追跡
 
-// Gemini API Key (実際のキーに置き換えてください)
+// Gemini API Key
 const GEMINI_API_KEY = 'AIzaSyBjkC1SF_63g6YsEg8bGz5KMQSAqdrA7Lg';
 
 // 初期化処理の改善
@@ -347,7 +346,6 @@ function fitMapToMarkers() {
     document.getElementById('loadingProcess').style.display = 'none';
 });
 
-// カメラの初期化
 // カメラの初期化
 async function initCamera() {
     const videoElement = document.getElementById('videoElement');
@@ -1028,7 +1026,6 @@ function displayOptimizedAddressList(optimizedLocations) {
         container.appendChild(addressItem);
     });
 }
-
     </script>
 </body>
 </html>
