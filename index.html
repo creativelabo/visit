@@ -268,44 +268,122 @@
             });
         }
         
-        // 撮影機能の修正
-        function captureImage() {
-        const videoElement = document.getElementById('videoElement');
-        const canvas = document.createElement('canvas');
-        const capturedImage = document.getElementById('capturedImage');
+        // 1. 画像を撮影してAI処理する関数
+async function captureImage() {
+    const videoElement = document.getElementById('videoElement');
+    const canvas = document.createElement('canvas');
+    const capturedImage = document.getElementById('capturedImage');
     
-        // 撮影中の表示
-        document.getElementById('loadingCapture').style.display = 'block';
-        document.getElementById('captureButton').disabled = true;
+    // 撮影中の表示
+    document.getElementById('loadingCapture').style.display = 'block';
+    document.getElementById('captureButton').disabled = true;
     
+    try {
         // キャンバスに現在のビデオフレームを描画
         canvas.width = videoElement.videoWidth;
         canvas.height = videoElement.videoHeight;
         canvas.getContext('2d').drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-    
+        
         // 画像データをBase64形式で取得
         const imageData = canvas.toDataURL('image/jpeg');
         capturedImage.src = imageData;
         capturedImage.style.display = 'block';
-    
-        // 実際のAI処理はここに追加（このサンプルではモックデータを使用）
-        setTimeout(() => {
-        const mockRecognizedAddresses = [
-            "京都市北区上賀茂豊田町３５－１",
-            "京都市北区上賀茂前田町２２",
-            "京都市右京区嵯峨天竜寺造路町６－２",
-            "京都市東山区本町１８丁目"
-        ].join('\n');
         
-        document.getElementById('addressesTextarea').value = mockRecognizedAddresses;
+        // 画像をAIに送信して住所を認識
+        const recognizedAddresses = await recognizeAddressesWithGemini(imageData);
+        
+        // 認識された住所をテキストエリアに表示
+        document.getElementById('addressesTextarea').value = recognizedAddresses.join('\n');
+        
+        // 処理完了
         document.getElementById('loadingCapture').style.display = 'none';
         document.getElementById('captureButton').disabled = false;
         
         // ステップ2に進む
         document.getElementById('step1').classList.add('hidden');
         document.getElementById('step2').classList.remove('hidden');
-        }, 2000);
+    } catch (error) {
+        console.error('画像認識エラー:', error);
+        alert('画像認識中にエラーが発生しました: ' + error.message);
+        document.getElementById('loadingCapture').style.display = 'none';
+        document.getElementById('captureButton').disabled = false;
+        document.getElementById('errorMessage').innerHTML = '画像認識中にエラーが発生しました: ' + error.message;
+        document.getElementById('errorMessage').style.display = 'block';
+    }
+}
+
+// 2. Gemini APIを使用して画像から住所を認識する関数
+async function recognizeAddressesWithGemini(imageData) {
+    try {
+        // Base64形式の画像データからBase64エンコード部分のみを抽出
+        const base64Image = imageData.split(',')[1];
+        
+        // Gemini APIへのリクエストを準備
+        const apiKey = 'YOUR_GEMINI_API_KEY'; // ← あなたのGemini APIキーを設定
+        const apiUrl = 'https://generativelanguage.googleapis.com/v1/models/gemini-pro-vision:generateContent';
+        
+        const payload = {
+            contents: [
+                {
+                    parts: [
+                        {
+                            text: "この画像に写っている住所リストを全て認識して、1行に1つの住所を入れた形式でリストアップしてください。余分な説明は不要です。住所だけをリストにしてください。"
+                        },
+                        {
+                            inline_data: {
+                                mime_type: "image/jpeg",
+                                data: base64Image
+                            }
+                        }
+                    ]
+                }
+            ],
+            generation_config: {
+                temperature: 0.1,
+                max_output_tokens: 1024
+            }
+        };
+        
+        // APIリクエストを送信
+        const response = await fetch(`${apiUrl}?key=${apiKey}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`API エラー: ${errorData.error?.message || response.statusText}`);
         }
+        
+        // レスポンスを解析
+        const data = await response.json();
+        const recognizedText = data.candidates[0].content.parts[0].text;
+        
+        // 認識されたテキストから住所リストを抽出
+        // 改行で分割して各行を取得
+        const addresses = recognizedText
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('- ') && !line.startsWith('* ') && !line.startsWith('#'));
+        
+        console.log('認識された住所:', addresses);
+        
+        return addresses;
+    } catch (error) {
+        console.error('Gemini API エラー:', error);
+        // エラーが発生した場合は、テスト用のモックデータを返す
+        alert('画像認識中にエラーが発生しました。テスト用の住所を使用します。');
+        return [
+            "京都市北区上賀茂豊田町３５－１",
+            "京都市北区上賀茂前田町２２",
+            "京都市右京区嵯峨天竜寺造路町６－２",
+            "京都市東山区本町１８丁目"
+        ];
+    }
+}
         
         // processAddresses関数の修正 - 位置情報取得のエラー処理改善
         function processAddresses() {
