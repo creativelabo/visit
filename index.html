@@ -312,7 +312,7 @@ function captureImage() {
     document.getElementById('loadingProcess').style.display = 'block';
     document.getElementById('processAddressesButton').disabled = true;
     
-    // 入力された住所を取得・検証
+    // 入力された住所を取得
     const addressText = document.getElementById('addressesTextarea').value.trim();
     if (!addressText) {
         alert("住所を入力してください");
@@ -324,71 +324,67 @@ function captureImage() {
     // 住所をリスト化
     addresses = addressText.split('\n').filter(address => address.trim() !== "");
     
-    // 位置情報の取得を試みる
+    // テスト実装：常にデフォルト位置を設定してから位置情報取得を試みる
+    currentPosition = { lat: 35.0116, lng: 135.7681 }; // 京都市中心付近（デフォルト）
+    
     if (navigator.geolocation) {
-        // 位置情報取得中メッセージを表示
-        document.getElementById('errorMessage').textContent = "位置情報を取得中...";
-        document.getElementById('errorMessage').style.display = 'block';
-        
         navigator.geolocation.getCurrentPosition(
             // 成功時
-            position => {
-                document.getElementById('errorMessage').style.display = 'none';
+            function(position) {
                 currentPosition = {
                     lat: position.coords.latitude,
                     lng: position.coords.longitude
                 };
                 console.log("現在位置を取得しました:", currentPosition);
-                initMap(); // マップ初期化
+                
+                // Google Mapsの初期化
+                initMap();
             },
             // エラー時
-            error => {
+            function(error) {
                 console.error('位置情報の取得に失敗しました:', error);
+                console.log("デフォルト位置を使用します:", currentPosition);
                 
-                // エラーに応じたメッセージ
+                // エラーメッセージ表示（省略可）
                 let errorMessage = "";
-                let helpMessage = "";
-                
                 switch(error.code) {
                     case error.PERMISSION_DENIED:
-                        errorMessage = "位置情報へのアクセスが拒否されました。";
-                        helpMessage = "<br><br>【対応方法】<br>・ブラウザのアドレスバー右側の🔒または(i)アイコンをクリック<br>・「位置情報」→「許可」を選択<br>・ページを再読み込み";
+                        errorMessage = "位置情報へのアクセスが拒否されました。デフォルトの位置情報を使用します。";
                         break;
                     case error.POSITION_UNAVAILABLE:
-                        errorMessage = "位置情報が利用できません。端末のGPS設定を確認してください。";
+                        errorMessage = "位置情報が利用できません。デフォルトの位置情報を使用します。";
                         break;
                     case error.TIMEOUT:
-                        errorMessage = "位置情報の取得がタイムアウトしました。再試行してください。";
+                        errorMessage = "位置情報の取得がタイムアウトしました。デフォルトの位置情報を使用します。";
                         break;
                     default:
-                        errorMessage = "位置情報の取得中に不明なエラーが発生しました。";
+                        errorMessage = "位置情報の取得中にエラーが発生しました。デフォルトの位置情報を使用します。";
                         break;
                 }
+
+                // プロンプトメッセージを表示
+document.getElementById('errorMessage').innerHTML = 
+    '位置情報が必要です。ブラウザで「このサイトの位置情報へのアクセスを許可」を選択してください。' + 
+    '<br>テスト中は京都市中心をデフォルト位置として使用します。';
+document.getElementById('errorMessage').style.display = 'block';
                 
-                // エラーメッセージを表示
-                document.getElementById('errorMessage').innerHTML = errorMessage + helpMessage;
-                document.getElementById('errorMessage').style.display = 'block';
-                document.getElementById('loadingProcess').style.display = 'none';
-                document.getElementById('processAddressesButton').disabled = false;
+                // メッセージをユーザーに表示（必要に応じて）
+                // alert(errorMessage);
                 
-                // デバッグ用のみ - 開発中のみコメントアウトを外す
-                // テスト用の位置（京都）を使用
-                // currentPosition = { lat: 35.0116, lng: 135.7681 };
-                // initMap();
+                // Google Mapsの初期化（デフォルト位置で）
+                initMap();
             },
-            // オプション - タイムアウトを長めに設定
             {
                 enableHighAccuracy: true,
-                timeout: 10000,
+                timeout: 5000,
                 maximumAge: 0
             }
         );
     } else {
-        // ブラウザが位置情報をサポートしていない場合
-        document.getElementById('errorMessage').textContent = 'お使いのブラウザは位置情報サービスをサポートしていません。';
-        document.getElementById('errorMessage').style.display = 'block';
-        document.getElementById('loadingProcess').style.display = 'none';
-        document.getElementById('processAddressesButton').disabled = false;
+        alert('お使いのブラウザは位置情報サービスをサポートしていません。デフォルトの位置情報を使用します。');
+        
+        // Google Mapsの初期化（デフォルト位置で）
+        initMap();
     }
 }
         
@@ -414,8 +410,14 @@ function captureImage() {
         }
         
         // 住所のジオコーディングと最適化
-async function geocodeAndOptimizeAddresses() {
+        async function geocodeAndOptimizeAddresses() {
     try {
+        // currentPositionが未設定の場合、デフォルト値を設定
+        if (!currentPosition) {
+            console.log("currentPositionが未設定のため、デフォルト位置を使用します");
+            currentPosition = { lat: 35.0116, lng: 135.7681 }; // 京都市中心付近
+        }
+        
         // 全ての住所を緯度経度に変換
         const locations = [];
         for (const address of addresses) {
@@ -433,27 +435,6 @@ async function geocodeAndOptimizeAddresses() {
                 return;
             }
         }
-        
-        // 現在地を出発点として、訪問先を最適化
-        const waypoints = [...locations]; // 全ての訪問先
-        
-        // 最近点探索アルゴリズムで最適化
-        optimizedAddresses = nearestNeighborAlgorithm(currentPosition, waypoints);
-        
-        // マーカーとルートを表示
-        await displayRoute(currentPosition, optimizedAddresses);
-        
-        // 最適化された住所リストを表示
-        displayOptimizedAddressList(optimizedAddresses);
-        
-        // マップを表示
-        document.getElementById('map').style.display = 'block';
-        
-        // ステップ3に進む
-        document.getElementById('step2').classList.add('hidden');
-        document.getElementById('step3').classList.remove('hidden');
-        document.getElementById('loadingProcess').style.display = 'none';
-        document.getElementById('processAddressesButton').disabled = false;
         
     } catch (error) {
         console.error("ルート最適化エラー:", error);
