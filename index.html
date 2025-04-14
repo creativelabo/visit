@@ -514,7 +514,7 @@ async function initGeolocation() {
     });
 }
 
-// 住所処理関数
+// 住所処理関数の修正 - エラー処理とフォールバックの改善
 async function processAddresses() {
     document.getElementById('loadingProcess').style.display = 'block';
     document.getElementById('processAddressesButton').disabled = true;
@@ -539,26 +539,39 @@ async function processAddresses() {
         return;
     }
 
+    // 位置情報取得のプロセスを開始
     try {
         // 現在位置を取得する前に、ローディングメッセージを表示
         document.getElementById('errorMessage').innerHTML = '現在地を取得しています...';
         document.getElementById('errorMessage').style.display = 'block';
         
+        // ブラウザが位置情報をサポートしているか確認
         if (!navigator.geolocation) {
             throw new Error('お使いのブラウザは位置情報をサポートしていません。');
         }
         
-        // 位置情報を取得するPromise
-        const getPosition = new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0
-            });
-        });
-        
         // 位置情報を取得
-        const position = await getPosition;
+        const position = await new Promise((resolve, reject) => {
+            const geolocationTimeout = setTimeout(() => {
+                reject(new Error('位置情報の取得がタイムアウトしました。'));
+            }, 15000); // 15秒タイムアウト
+            
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    clearTimeout(geolocationTimeout);
+                    resolve(position);
+                },
+                (error) => {
+                    clearTimeout(geolocationTimeout);
+                    reject(error);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        });
         
         // 現在位置を設定
         currentPosition = {
@@ -569,7 +582,7 @@ async function processAddresses() {
         console.log('現在位置を取得しました:', currentPosition);
         document.getElementById('errorMessage').style.display = 'none';
         
-        // Google Maps APIが読み込まれているか確認
+        // マップの初期化と処理
         if (typeof google !== 'undefined' && google.maps) {
             initMap();
         } else {
@@ -578,32 +591,39 @@ async function processAddresses() {
     } catch (error) {
         console.error('位置情報の取得に失敗しました:', error);
         
+        // セーフティネット - 京都市中心のデフォルト位置を使用
+        currentPosition = { lat: 35.0116, lng: 135.7681 };
+        console.log('デフォルト位置を使用します:', currentPosition);
+        
+        // エラーメッセージを表示
         let errorMessage = '';
         if (error.code) {
             switch (error.code) {
                 case 1: // PERMISSION_DENIED
-                    errorMessage = '位置情報の使用が拒否されました。このアプリを使用するには位置情報へのアクセスを許可してください。';
+                    errorMessage = '位置情報の使用が拒否されました。ブラウザの設定で許可してください。デフォルト位置を使用します。';
                     break;
                 case 2: // POSITION_UNAVAILABLE
-                    errorMessage = '位置情報が利用できません。';
+                    errorMessage = '位置情報が利用できません。デフォルト位置を使用します。';
                     break;
                 case 3: // TIMEOUT
-                    errorMessage = '位置情報の取得がタイムアウトしました。';
+                    errorMessage = '位置情報の取得がタイムアウトしました。デフォルト位置を使用します。';
                     break;
                 default:
-                    errorMessage = '位置情報の取得中にエラーが発生しました。';
+                    errorMessage = '位置情報の取得中にエラーが発生しました。デフォルト位置を使用します。';
             }
         } else {
-            errorMessage = '位置情報の取得中にエラーが発生しました: ' + error.message;
+            errorMessage = '位置情報の取得中にエラーが発生しました: ' + error.message + ' デフォルト位置を使用します。';
         }
         
         document.getElementById('errorMessage').innerHTML = errorMessage;
         document.getElementById('errorMessage').style.display = 'block';
-        document.getElementById('loadingProcess').style.display = 'none';
-        document.getElementById('processAddressesButton').disabled = false;
         
-        // エラーが発生した場合は処理を中断
-        return;
+        // エラーがあってもマップ初期化を続行（デフォルト位置で）
+        if (typeof google !== 'undefined' && google.maps) {
+            initMap();
+        } else {
+            loadGoogleMapsApi();
+        }
     }
 }
 
