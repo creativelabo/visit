@@ -477,8 +477,45 @@ async function recognizeAddressesWithGemini(imageData) {
     }
 }
         
-// processAddresses関数の修正
-function processAddresses() {
+// 位置情報の初期化
+async function initGeolocation() {
+    return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+            reject(new Error('位置情報がサポートされていません'));
+            return;
+        }
+        
+        console.log('位置情報を取得します...');
+        
+        // 位置情報の取得
+        navigator.geolocation.getCurrentPosition(
+            // 成功時
+            (position) => {
+                currentPosition = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude
+                };
+                console.log('現在位置の取得に成功しました:', currentPosition);
+                locationInitialized = true;
+                resolve(currentPosition);
+            },
+            // エラー時
+            (error) => {
+                console.warn('位置情報の取得に失敗しました:', error);
+                reject(error); // エラーを返す（デフォルト位置を設定しない）
+            },
+            // オプション
+            {
+                enableHighAccuracy: true, // 高精度
+                timeout: 10000,          // 10秒
+                maximumAge: 0            // キャッシュを使用しない
+            }
+        );
+    });
+}
+
+// 住所処理関数
+async function processAddresses() {
     document.getElementById('loadingProcess').style.display = 'block';
     document.getElementById('processAddressesButton').disabled = true;
     document.getElementById('errorMessage').style.display = 'none';
@@ -494,67 +531,79 @@ function processAddresses() {
 
     // 住所をリスト化
     addresses = addressText.split('\n').filter(address => address.trim() !== "");
+    
+    if (addresses.length === 0) {
+        alert("有効な住所が入力されていません");
+        document.getElementById('loadingProcess').style.display = 'none';
+        document.getElementById('processAddressesButton').disabled = false;
+        return;
+    }
 
-    // デフォルト位置を設定 (京都市中心付近)
-    currentPosition = { lat: 35.0116, lng: 135.7681 };
-
-    // 位置情報取得を改善
-    if (navigator.geolocation) {
-        // 位置情報取得前にユーザーにメッセージを表示
-        document.getElementById('errorMessage').innerHTML = 
-            '現在地を取得しています...位置情報へのアクセスを許可してください。';
+    try {
+        // 現在位置を取得する前に、ローディングメッセージを表示
+        document.getElementById('errorMessage').innerHTML = '現在地を取得しています...';
         document.getElementById('errorMessage').style.display = 'block';
         
-        navigator.geolocation.getCurrentPosition(
-            // 成功時
-            function(position) {
-                currentPosition = {
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude
-                };
-                console.log("現在位置を取得しました:", currentPosition);
-                document.getElementById('errorMessage').style.display = 'none';
-                initializeMapAndProcess();
-            },
-            // エラー時
-            function(error) {
-                console.error('位置情報の取得に失敗しました:', error);
-                console.log("デフォルト位置を使用します:", currentPosition);
-                    
-                // エラーメッセージ表示
-                let errorMessage = "";
-                switch(error.code) {
-                    case error.PERMISSION_DENIED:
-                        errorMessage = "位置情報へのアクセスが拒否されました。現在地を出発点にするには、位置情報へのアクセスを許可してください。";
-                        break;
-                    case error.POSITION_UNAVAILABLE:
-                        errorMessage = "位置情報が利用できません。デフォルトの位置情報を使用します。";
-                        break;
-                    case error.TIMEOUT:
-                        errorMessage = "位置情報の取得がタイムアウトしました。デフォルトの位置情報を使用します。";
-                        break;
-                    default:
-                        errorMessage = "位置情報の取得中にエラーが発生しました。デフォルトの位置情報を使用します。";
-                        break;
-                }
-                    
-                document.getElementById('errorMessage').innerHTML = errorMessage;
-                document.getElementById('errorMessage').style.display = 'block';
-                    
-                // デフォルト位置でも続行
-                initializeMapAndProcess();
-            },
-            {
-                enableHighAccuracy: true,  // 高精度の位置情報を要求
-                timeout: 10000,           // タイムアウトを10秒に延長
-                maximumAge: 0             // キャッシュした位置情報を使用しない
-            }
-        );
-    } else {
-        alert('お使いのブラウザは位置情報サービスをサポートしていません。デフォルトの位置情報を使用します。');
+        if (!navigator.geolocation) {
+            throw new Error('お使いのブラウザは位置情報をサポートしていません。');
+        }
         
-        // Google Mapsの初期化（デフォルト位置で）
-        initializeMapAndProcess();
+        // 位置情報を取得するPromise
+        const getPosition = new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            });
+        });
+        
+        // 位置情報を取得
+        const position = await getPosition;
+        
+        // 現在位置を設定
+        currentPosition = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+        };
+        
+        console.log('現在位置を取得しました:', currentPosition);
+        document.getElementById('errorMessage').style.display = 'none';
+        
+        // Google Maps APIが読み込まれているか確認
+        if (typeof google !== 'undefined' && google.maps) {
+            initMap();
+        } else {
+            loadGoogleMapsApi();
+        }
+    } catch (error) {
+        console.error('位置情報の取得に失敗しました:', error);
+        
+        let errorMessage = '';
+        if (error.code) {
+            switch (error.code) {
+                case 1: // PERMISSION_DENIED
+                    errorMessage = '位置情報の使用が拒否されました。このアプリを使用するには位置情報へのアクセスを許可してください。';
+                    break;
+                case 2: // POSITION_UNAVAILABLE
+                    errorMessage = '位置情報が利用できません。';
+                    break;
+                case 3: // TIMEOUT
+                    errorMessage = '位置情報の取得がタイムアウトしました。';
+                    break;
+                default:
+                    errorMessage = '位置情報の取得中にエラーが発生しました。';
+            }
+        } else {
+            errorMessage = '位置情報の取得中にエラーが発生しました: ' + error.message;
+        }
+        
+        document.getElementById('errorMessage').innerHTML = errorMessage;
+        document.getElementById('errorMessage').style.display = 'block';
+        document.getElementById('loadingProcess').style.display = 'none';
+        document.getElementById('processAddressesButton').disabled = false;
+        
+        // エラーが発生した場合は処理を中断
+        return;
     }
 }
 
