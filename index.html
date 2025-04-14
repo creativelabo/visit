@@ -484,7 +484,7 @@ async function recognizeAddressesWithGemini(imageData) {
     }
 }
         
-// 位置情報の初期化 - スマホ対応強化版
+// 位置情報の初期化 - スマホ対応強化版（シンプル版）
 async function initGeolocation() {
     return new Promise((resolve, reject) => {
         if (!navigator.geolocation) {
@@ -495,10 +495,6 @@ async function initGeolocation() {
         
         console.log('位置情報を取得します...');
         
-        // ローディング表示
-        document.getElementById('errorMessage').innerHTML = '現在地を取得しています...';
-        document.getElementById('errorMessage').style.display = 'block';
-        
         // 成功コールバック
         const successCallback = (position) => {
             const currentPos = {
@@ -506,19 +502,10 @@ async function initGeolocation() {
                 lng: position.coords.longitude
             };
             
-            console.log('★現在位置の取得に成功しました:', currentPos);
-            document.getElementById('errorMessage').style.display = 'none';
+            console.log('現在位置の取得に成功しました:', currentPos);
             
-            // グローバル変数に保存
+            // グローバル変数に直接保存
             currentPosition = currentPos;
-            
-            // 位置情報をローカルストレージに一時保存（バックアップとして）
-            try {
-                localStorage.setItem('lastKnownPosition', JSON.stringify(currentPos));
-                console.log('位置情報をローカルストレージに保存しました');
-            } catch (e) {
-                console.warn('位置情報をストレージに保存できませんでした', e);
-            }
             
             resolve(currentPos);
         };
@@ -527,54 +514,29 @@ async function initGeolocation() {
         const errorCallback = (error) => {
             console.warn('位置情報の取得に失敗しました:', error);
             
-            // 前回保存した位置があれば使用
-            try {
-                const savedPosition = localStorage.getItem('lastKnownPosition');
-                if (savedPosition) {
-                    const parsedPos = JSON.parse(savedPosition);
-                    console.log('前回の位置情報を使用します:', parsedPos);
-                    resolve(parsedPos);
-                    return;
-                }
-            } catch (e) {
-                console.warn('保存された位置情報の読み込みに失敗しました', e);
-            }
-            
             // デフォルト位置（京都駅）を使用
             const defaultPos = { lat: 34.9858, lng: 135.7588 };
             console.warn('デフォルト位置（京都駅）を使用します:', defaultPos);
+            
+            // グローバル変数に直接保存
+            currentPosition = defaultPos;
+            
             resolve(defaultPos);
         };
         
-        // 高精度オプションを設定 - タイムアウトを長めに
+        // 高精度オプションを設定
         const options = {
             enableHighAccuracy: true,
-            timeout: 20000,        // 20秒に延長
-            maximumAge: 30000      // 30秒までのキャッシュを許可
+            timeout: 20000,
+            maximumAge: 0
         };
         
-        // 位置情報の取得を試行 - モバイルでの成功率向上のため複数の方法を使用
-        
-        // 方法1: getCurrentPosition - 標準的な位置取得
+        // 位置情報の取得を試行
         navigator.geolocation.getCurrentPosition(
             successCallback,
             errorCallback,
             options
         );
-        
-        // 方法2: watchPosition - より正確な位置を継続的に取得
-        // モバイルデバイスでは、この方法がより効果的なことがある
-        const watchId = navigator.geolocation.watchPosition(
-            successCallback,
-            (error) => { console.log('Watch position error:', error); },
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-        );
-        
-        // 15秒後に監視を停止
-        setTimeout(() => {
-            navigator.geolocation.clearWatch(watchId);
-            console.log('位置監視を停止しました');
-        }, 15000);
     });
 }
 
@@ -1363,6 +1325,9 @@ function displayOptimizedAddressList(optimizedLocations) {
     currentItem.innerHTML = '<strong>0: 現在地（出発点）</strong>';
     container.appendChild(currentItem);
     
+    // デバッグ用
+    console.log("表示する最適化ルート:", optimizedLocations);
+    
     // 各訪問先を最適化された順序で表示
     optimizedLocations.forEach((location, index) => {
         const addressItem = document.createElement('div');
@@ -1374,7 +1339,7 @@ function displayOptimizedAddressList(optimizedLocations) {
         addressItem.innerHTML = `<strong>${index + 1}:</strong> ${addressText}`;
         container.appendChild(addressItem);
         
-        // デバッグ用に座標も表示（本番では削除可）
+        // デバッグ用に座標も表示
         console.log(`訪問先 ${index + 1}: ${addressText} @ (${location.lat}, ${location.lng})`);
     });
 }
