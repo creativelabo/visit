@@ -242,6 +242,9 @@ document.addEventListener('DOMContentLoaded', function() {
     initCamera();
     initEventListeners();
     
+    // ルート設定UIを追加
+    addRouteOptimizationSettingsUI();
+    
     // ローディング表示を非表示に
     document.getElementById('loadingCapture').style.display = 'none';
     document.getElementById('loadingProcess').style.display = 'none';
@@ -264,7 +267,7 @@ async function initCamera() {
     }
 }
         
-// イベントリスナーの初期化
+// イベントリスナーの初期化関数の修正
 function initEventListeners() {
     // 撮影ボタン
     document.getElementById('captureButton').addEventListener('click', captureImage);
@@ -280,7 +283,11 @@ function initEventListeners() {
         document.getElementById('step3').classList.add('hidden');
         document.getElementById('step2').classList.remove('hidden');
     });
+    
+    // ルート設定UIを追加
+    addRouteOptimizationSettingsUI();
 }
+
         
 // 1. 画像を撮影してAI処理する関数
 async function captureImage() {
@@ -477,7 +484,7 @@ async function recognizeAddressesWithGemini(imageData) {
     }
 }
         
-// 位置情報の初期化
+// 現在位置取得の改善
 async function initGeolocation() {
     return new Promise((resolve, reject) => {
         if (!navigator.geolocation) {
@@ -487,34 +494,57 @@ async function initGeolocation() {
         
         console.log('位置情報を取得します...');
         
-        // 位置情報の取得
-        navigator.geolocation.getCurrentPosition(
-            // 成功時
-            (position) => {
-                currentPosition = {
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude
-                };
-                console.log('現在位置の取得に成功しました:', currentPosition);
-                locationInitialized = true;
-                resolve(currentPosition);
-            },
-            // エラー時
-            (error) => {
-                console.warn('位置情報の取得に失敗しました:', error);
-                reject(error); // エラーを返す（デフォルト位置を設定しない）
-            },
-            // オプション
-            {
-                enableHighAccuracy: true, // 高精度
-                timeout: 10000,          // 10秒
-                maximumAge: 0            // キャッシュを使用しない
+        const successCallback = (position) => {
+            const currentPos = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+            };
+            console.log('現在位置の取得に成功しました:', currentPos);
+            // 位置情報をローカルストレージに一時保存（バックアップとして）
+            try {
+                localStorage.setItem('lastKnownPosition', JSON.stringify(currentPos));
+            } catch (e) {
+                console.warn('位置情報をストレージに保存できませんでした', e);
             }
+            resolve(currentPos);
+        };
+        
+        const errorCallback = (error) => {
+            console.warn('位置情報の取得に失敗しました:', error);
+            
+            // 前回保存した位置があれば使用
+            try {
+                const savedPosition = localStorage.getItem('lastKnownPosition');
+                if (savedPosition) {
+                    const parsedPos = JSON.parse(savedPosition);
+                    console.log('前回の位置情報を使用します:', parsedPos);
+                    resolve(parsedPos);
+                    return;
+                }
+            } catch (e) {
+                console.warn('保存された位置情報の読み込みに失敗しました', e);
+            }
+            
+            reject(error);
+        };
+        
+        // 高精度オプションを設定
+        const options = {
+            enableHighAccuracy: true,
+            timeout: 15000,         // タイムアウトを長め（15秒）に設定
+            maximumAge: 30000       // 位置情報のキャッシュを30秒まで許可
+        };
+        
+        // 位置情報の取得を試行
+        navigator.geolocation.getCurrentPosition(
+            successCallback,
+            errorCallback,
+            options
         );
     });
 }
 
-// 住所処理関数の修正 - エラー処理とフォールバックの改善
+// 住所処理関数の改善
 async function processAddresses() {
     document.getElementById('loadingProcess').style.display = 'block';
     document.getElementById('processAddressesButton').disabled = true;
@@ -539,91 +569,73 @@ async function processAddresses() {
         return;
     }
 
-    // 位置情報取得のプロセスを開始
     try {
         // 現在位置を取得する前に、ローディングメッセージを表示
         document.getElementById('errorMessage').innerHTML = '現在地を取得しています...';
         document.getElementById('errorMessage').style.display = 'block';
         
-        // ブラウザが位置情報をサポートしているか確認
-        if (!navigator.geolocation) {
-            throw new Error('お使いのブラウザは位置情報をサポートしていません。');
-        }
-        
-        // 位置情報を取得
-        const position = await new Promise((resolve, reject) => {
-            const geolocationTimeout = setTimeout(() => {
-                reject(new Error('位置情報の取得がタイムアウトしました。'));
-            }, 15000); // 15秒タイムアウト
-            
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    clearTimeout(geolocationTimeout);
-                    resolve(position);
-                },
-                (error) => {
-                    clearTimeout(geolocationTimeout);
-                    reject(error);
-                },
-                {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
-                }
-            );
-        });
-        
-        // 現在位置を設定
-        currentPosition = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-        };
+        // 位置情報の取得を試行
+        currentPosition = await initGeolocation();
         
         console.log('現在位置を取得しました:', currentPosition);
         document.getElementById('errorMessage').style.display = 'none';
         
-        // マップの初期化と処理
-        if (typeof google !== 'undefined' && google.maps) {
-            initMap();
-        } else {
-            loadGoogleMapsApi();
-        }
+        // Google Maps APIの読み込みを確認して初期化
+        initializeMapAndProcess();
     } catch (error) {
         console.error('位置情報の取得に失敗しました:', error);
         
-        // セーフティネット - 京都市中心のデフォルト位置を使用
-        currentPosition = { lat: 35.0116, lng: 135.7681 };
-        console.log('デフォルト位置を使用します:', currentPosition);
+        // エラー発生時のフォールバック処理
+        try {
+            // バックアップとして、IPベースのおおよその位置情報取得を試みる
+            document.getElementById('errorMessage').innerHTML = '位置情報の取得に失敗しました。代替方法で位置を推定しています...';
+            
+            const ipLocationResponse = await fetch('https://ipapi.co/json/');
+            if (ipLocationResponse.ok) {
+                const ipData = await ipLocationResponse.json();
+                currentPosition = {
+                    lat: ipData.latitude,
+                    lng: ipData.longitude
+                };
+                console.log('IP位置情報を使用します:', currentPosition);
+                document.getElementById('errorMessage').innerHTML = '現在地を推定しました（精度が低い場合があります）';
+                
+                // 処理続行
+                initializeMapAndProcess();
+                return;
+            }
+        } catch (ipError) {
+            console.error('IP位置情報の取得にも失敗:', ipError);
+        }
         
-        // エラーメッセージを表示
+        // すべての方法が失敗した場合は、デフォルト位置（京都駅）を使用
+        currentPosition = { lat: 34.9858, lng: 135.7588 }; // 京都駅
+        console.log('デフォルト位置（京都駅）を使用します');
+        
         let errorMessage = '';
         if (error.code) {
             switch (error.code) {
                 case 1: // PERMISSION_DENIED
-                    errorMessage = '位置情報の使用が拒否されました。ブラウザの設定で許可してください。デフォルト位置を使用します。';
+                    errorMessage = '位置情報の使用が拒否されました。このアプリを使用するには位置情報へのアクセスを許可してください。';
                     break;
                 case 2: // POSITION_UNAVAILABLE
-                    errorMessage = '位置情報が利用できません。デフォルト位置を使用します。';
+                    errorMessage = '位置情報が利用できません。デフォルト位置（京都駅）を使用します。';
                     break;
                 case 3: // TIMEOUT
-                    errorMessage = '位置情報の取得がタイムアウトしました。デフォルト位置を使用します。';
+                    errorMessage = '位置情報の取得がタイムアウトしました。デフォルト位置（京都駅）を使用します。';
                     break;
                 default:
-                    errorMessage = '位置情報の取得中にエラーが発生しました。デフォルト位置を使用します。';
+                    errorMessage = '位置情報の取得中にエラーが発生しました。デフォルト位置（京都駅）を使用します。';
             }
         } else {
-            errorMessage = '位置情報の取得中にエラーが発生しました: ' + error.message + ' デフォルト位置を使用します。';
+            errorMessage = '位置情報の取得中にエラーが発生しました: ' + error.message + '。デフォルト位置（京都駅）を使用します。';
         }
         
         document.getElementById('errorMessage').innerHTML = errorMessage;
         document.getElementById('errorMessage').style.display = 'block';
         
-        // エラーがあってもマップ初期化を続行（デフォルト位置で）
-        if (typeof google !== 'undefined' && google.maps) {
-            initMap();
-        } else {
-            loadGoogleMapsApi();
-        }
+        // デフォルト位置でも処理を続行
+        initializeMapAndProcess();
     }
 }
 
@@ -753,7 +765,7 @@ async function geocodeAndOptimizeAddresses() {
         
         // 最適化されたルートを計算
         console.log("ルートを最適化します... 出発地:", currentPosition);
-        optimizedAddresses = nearestNeighborAlgorithm(currentPosition, locations);
+        optimizedAddresses = await optimizeRouteWithDirections(currentPosition, locations);
         console.log("最適化されたルート:", optimizedAddresses);
         
         // マップを表示
@@ -886,6 +898,229 @@ function nearestNeighborAlgorithm(start, locations) {
     
     return route;
 }
+
+// ルート最適化のオプションを設定する関数を追加
+function setRouteOptimizationOptions() {
+    // ローカルストレージからユーザー設定を取得（初回はデフォルト値を使用）
+    let routeOptions = {
+        travelMode: localStorage.getItem('travelMode') || 'DRIVING',
+        avoidHighways: localStorage.getItem('avoidHighways') === 'true' || false,
+        avoidTolls: localStorage.getItem('avoidTolls') === 'true' || false,
+        optimizeWaypoints: true
+    };
+    
+    return routeOptions;
+}
+
+// 最適化アルゴリズムの改善 - 移動時間を考慮
+async function optimizeRouteWithDirections(start, locations) {
+    // 最適化設定を取得
+    const routeOptions = setRouteOptimizationOptions();
+    
+    // 訪問先が3箇所以下の場合は単純な最近点探索で十分
+    if (locations.length <= 3) {
+        return nearestNeighborAlgorithm(start, locations);
+    }
+    
+    try {
+        // Google Directions Matrixを使用して実際の移動時間を取得
+        const service = new google.maps.DistanceMatrixService();
+        
+        // 全地点（現在地 + 訪問先）を含む配列を作成
+        const allPoints = [start, ...locations.map(loc => ({ lat: loc.lat, lng: loc.lng }))];
+        
+        // 距離行列計算のリクエスト
+        const request = {
+            origins: allPoints,
+            destinations: allPoints,
+            travelMode: google.maps.TravelMode[routeOptions.travelMode],
+            avoidHighways: routeOptions.avoidHighways,
+            avoidTolls: routeOptions.avoidTolls
+        };
+        
+        // 距離行列を取得
+        const matrix = await new Promise((resolve, reject) => {
+            service.getDistanceMatrix(request, (response, status) => {
+                if (status === 'OK') {
+                    resolve(response);
+                } else {
+                    reject(new Error(`距離行列の取得に失敗: ${status}`));
+                }
+            });
+        });
+        
+        // 距離行列から移動時間を抽出
+        const travelTimes = [];
+        for (let i = 0; i < matrix.rows.length; i++) {
+            travelTimes[i] = [];
+            for (let j = 0; j < matrix.rows[i].elements.length; j++) {
+                const element = matrix.rows[i].elements[j];
+                if (element.status === 'OK') {
+                    // 秒単位の所要時間
+                    travelTimes[i][j] = element.duration.value;
+                } else {
+                    // エラーの場合は大きな値を設定
+                    travelTimes[i][j] = 9999999;
+                }
+            }
+        }
+        
+        // 改良型最近点探索アルゴリズム（移動時間ベース）
+        const route = [];
+        const unvisited = [...Array(locations.length).keys()];
+        let currentIndex = 0; // 現在地からスタート
+        
+        while (unvisited.length > 0) {
+            // 現在地から最も移動時間が短い未訪問地点を見つける
+            let nearestIndex = -1;
+            let shortestTime = Infinity;
+            
+            for (let i = 0; i < unvisited.length; i++) {
+                const locationIndex = unvisited[i] + 1; // +1 は現在地が[0]であるため
+                const time = travelTimes[currentIndex][locationIndex];
+                
+                if (time < shortestTime) {
+                    shortestTime = time;
+                    nearestIndex = i;
+                }
+            }
+            
+            if (nearestIndex === -1) break; // 到達できない場合は終了
+            
+            // 次の訪問先を追加
+            const nextLocationIndex = unvisited[nearestIndex];
+            route.push(locations[nextLocationIndex]);
+            
+            // 現在地を更新
+            currentIndex = nextLocationIndex + 1;
+            
+            // 訪問済みリストから削除
+            unvisited.splice(nearestIndex, 1);
+        }
+        
+        return route;
+    } catch (error) {
+        console.warn('最適化エラー、バックアップ方法に切り替えます:', error);
+        // エラー時は単純な最近点探索にフォールバック
+        return nearestNeighborAlgorithm(start, locations);
+    }
+}
+
+// ルート最適化設定UIを追加 - HTMLコード
+function addRouteOptimizationSettingsUI() {
+    // すでに設定UIが存在するか確認
+    if (document.getElementById('routeSettingsContainer')) {
+        return;
+    }
+    
+    // 設定UIのHTML
+    const settingsHTML = `
+        <div class="card" id="routeSettingsContainer">
+            <div class="step-title">
+                <div class="step-number">⚙️</div>
+                <h2>ルート設定</h2>
+            </div>
+            <div class="settings-container">
+                <div class="setting-item">
+                    <label for="travelModeSelect">移動手段:</label>
+                    <select id="travelModeSelect" class="settings-select">
+                        <option value="DRIVING">車</option>
+                        <option value="WALKING">徒歩</option>
+                        <option value="TRANSIT">公共交通機関</option>
+                        <option value="BICYCLING">自転車</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label for="avoidHighwaysCheck">高速道路を避ける:</label>
+                    <input type="checkbox" id="avoidHighwaysCheck">
+                </div>
+                <div class="setting-item">
+                    <label for="avoidTollsCheck">有料道路を避ける:</label>
+                    <input type="checkbox" id="avoidTollsCheck">
+                </div>
+            </div>
+            <button id="saveSettingsButton">設定を保存</button>
+        </div>
+    `;
+    
+    // スタイルをheadに追加
+    const style = document.createElement('style');
+    style.textContent = `
+        .settings-container {
+            margin-bottom: 15px;
+        }
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 5px 0;
+        }
+        .settings-select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            background-color: white;
+            width: 150px;
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // 設定UIを挿入（ステップ2の前）
+    const step2Element = document.getElementById('step2');
+    step2Element.parentNode.insertBefore(
+        createElementFromHTML(settingsHTML),
+        step2Element
+    );
+    
+    // 保存された設定を読み込む
+    loadSavedSettings();
+    
+    // 設定保存ボタンのイベントリスナーを追加
+    document.getElementById('saveSettingsButton').addEventListener('click', saveRouteSettings);
+}
+
+// HTML文字列からDOM要素を作成するヘルパー関数
+function createElementFromHTML(htmlString) {
+    const div = document.createElement('div');
+    div.innerHTML = htmlString.trim();
+    return div.firstChild;
+}
+
+// 保存された設定を読み込む
+function loadSavedSettings() {
+    try {
+        const travelMode = localStorage.getItem('travelMode') || 'DRIVING';
+        const avoidHighways = localStorage.getItem('avoidHighways') === 'true';
+        const avoidTolls = localStorage.getItem('avoidTolls') === 'true';
+        
+        // UI要素に設定を反映
+        document.getElementById('travelModeSelect').value = travelMode;
+        document.getElementById('avoidHighwaysCheck').checked = avoidHighways;
+        document.getElementById('avoidTollsCheck').checked = avoidTolls;
+    } catch (e) {
+        console.warn('設定の読み込みに失敗しました', e);
+    }
+}
+
+// ルート設定を保存
+function saveRouteSettings() {
+    try {
+        const travelMode = document.getElementById('travelModeSelect').value;
+        const avoidHighways = document.getElementById('avoidHighwaysCheck').checked;
+        const avoidTolls = document.getElementById('avoidTollsCheck').checked;
+        
+        // ローカルストレージに保存
+        localStorage.setItem('travelMode', travelMode);
+        localStorage.setItem('avoidHighways', avoidHighways);
+        localStorage.setItem('avoidTolls', avoidTolls);
+        
+        alert('ルート設定を保存しました');
+    } catch (e) {
+        console.error('設定の保存に失敗しました', e);
+        alert('設定の保存に失敗しました: ' + e.message);
+    }
+}
         
 // 2点間の距離を計算
 function calculateDistance(lat1, lng1, lat2, lng2) {
@@ -904,7 +1139,7 @@ function calculateDistance(lat1, lng1, lat2, lng2) {
     return distance;
 }
         
-// ルートとマーカーを表示する関数の修正
+// Google Maps Directions APIでルートを表示する関数の改善
 function displayRoute(start, optimizedLocations) {
     if (!start || !optimizedLocations || optimizedLocations.length === 0) {
         console.error('ルート表示に必要なデータがありません', { start, locationsCount: optimizedLocations ? optimizedLocations.length : 0 });
@@ -913,6 +1148,9 @@ function displayRoute(start, optimizedLocations) {
 
     // マーカーをクリア
     clearMarkers();
+
+    // 最適化設定を取得
+    const routeOptions = setRouteOptimizationOptions();
 
     // 現在地のマーカー
     const startMarker = new google.maps.Marker({
@@ -972,13 +1210,38 @@ function displayRoute(start, optimizedLocations) {
                 optimizedLocations[optimizedLocations.length - 1].lng
             ),
             waypoints: waypoints,
-            optimizeWaypoints: false,
-            travelMode: google.maps.TravelMode.DRIVING
+            optimizeWaypoints: routeOptions.optimizeWaypoints,
+            travelMode: google.maps.TravelMode[routeOptions.travelMode],
+            avoidHighways: routeOptions.avoidHighways,
+            avoidTolls: routeOptions.avoidTolls
         };
         
         directionsService.route(request, (result, status) => {
             if (status === "OK") {
                 directionsRenderer.setDirections(result);
+                
+                // 総所要時間と総距離を表示
+                if (result.routes && result.routes.length > 0) {
+                    const route = result.routes[0];
+                    let totalDistance = 0;
+                    let totalDuration = 0;
+                    
+                    // すべてのレッグの距離と時間を合計
+                    route.legs.forEach(leg => {
+                        totalDistance += leg.distance.value;
+                        totalDuration += leg.duration.value;
+                    });
+                    
+                    // km単位の距離と分単位の時間に変換
+                    const distanceKm = (totalDistance / 1000).toFixed(1);
+                    const durationMin = Math.round(totalDuration / 60);
+                    
+                    // ルート情報を表示
+                    const routeInfoDiv = document.createElement('div');
+                    routeInfoDiv.className = 'address-item';
+                    routeInfoDiv.innerHTML = `<strong>ルート情報:</strong> 総距離: ${distanceKm}km, 推定所要時間: ${durationMin}分`;
+                    document.getElementById('optimizedAddressList').prepend(routeInfoDiv);
+                }
             } else {
                 console.error("ルート計算エラー:", status);
                 // ルート計算に失敗した場合でもマーカーは表示されるので、
@@ -990,6 +1253,80 @@ function displayRoute(start, optimizedLocations) {
         console.error("ルート表示エラー:", error);
         fitMapToMarkers();
     }
+}
+
+// ルート最適化設定UIを追加 - HTMLコード
+function addRouteOptimizationSettingsUI() {
+    // すでに設定UIが存在するか確認
+    if (document.getElementById('routeSettingsContainer')) {
+        return;
+    }
+    
+    // 設定UIのHTML
+    const settingsHTML = `
+        <div class="card" id="routeSettingsContainer">
+            <div class="step-title">
+                <div class="step-number">⚙️</div>
+                <h2>ルート設定</h2>
+            </div>
+            <div class="settings-container">
+                <div class="setting-item">
+                    <label for="travelModeSelect">移動手段:</label>
+                    <select id="travelModeSelect" class="settings-select">
+                        <option value="DRIVING">車</option>
+                        <option value="WALKING">徒歩</option>
+                        <option value="TRANSIT">公共交通機関</option>
+                        <option value="BICYCLING">自転車</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label for="avoidHighwaysCheck">高速道路を避ける:</label>
+                    <input type="checkbox" id="avoidHighwaysCheck">
+                </div>
+                <div class="setting-item">
+                    <label for="avoidTollsCheck">有料道路を避ける:</label>
+                    <input type="checkbox" id="avoidTollsCheck">
+                </div>
+            </div>
+            <button id="saveSettingsButton">設定を保存</button>
+        </div>
+    `;
+    
+    // スタイルをheadに追加
+    const style = document.createElement('style');
+    style.textContent = `
+        .settings-container {
+            margin-bottom: 15px;
+        }
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 5px 0;
+        }
+        .settings-select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            background-color: white;
+            width: 150px;
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // 設定UIを挿入（ステップ2の前）
+    const step2Element = document.getElementById('step2');
+    step2Element.parentNode.insertBefore(
+        createElementFromHTML(settingsHTML),
+        step2Element
+    );
+    
+    // 保存された設定を読み込む
+    loadSavedSettings();
+    
+    // 設定保存ボタンのイベントリスナーを追加
+    document.getElementById('saveSettingsButton').addEventListener('click', saveRouteSettings);
 }
         
 // 最適化された住所リストを表示
@@ -1012,12 +1349,15 @@ function displayOptimizedAddressList(optimizedLocations) {
     });
 }
         
-// Google マップで開く
+// Google マップで開く関数の改善
 function openInGoogleMaps() {
     if (optimizedAddresses.length === 0) {
         alert('最適化されたルートがありません');
         return;
     }
+    
+    // ルート設定を取得
+    const routeOptions = setRouteOptimizationOptions();
     
     // Google マップで開くためのURLを作成
     let url = `https://www.google.com/maps/dir/?api=1`;
@@ -1029,14 +1369,29 @@ function openInGoogleMaps() {
     const lastLocation = optimizedAddresses[optimizedAddresses.length - 1];
     url += `&destination=${lastLocation.lat},${lastLocation.lng}`;
     
-    // 経由地点を設定
+    // 経由地点を設定（最大10箇所までGoogle Mapsで対応）
     if (optimizedAddresses.length > 1) {
-        const waypoints = optimizedAddresses.slice(0, -1).map(loc => `${loc.lat},${loc.lng}`).join('|');
+        // Google Mapsの制限に合わせて経由地点を制限（最大9箇所）
+        const maxWaypoints = Math.min(optimizedAddresses.length - 1, 9);
+        const waypoints = optimizedAddresses.slice(0, maxWaypoints).map(loc => `${loc.lat},${loc.lng}`).join('|');
         url += `&waypoints=${waypoints}`;
+        
+        // 経由地点が制限を超える場合は警告
+        if (optimizedAddresses.length - 1 > 9) {
+            alert(`注意: Google Mapsでは最大9箇所の経由地点しか設定できません。\n残りの${optimizedAddresses.length - 10}箇所は省略されます。`);
+        }
     }
     
     // 移動モードを設定
-    url += `&travelmode=driving`;
+    url += `&travelmode=${routeOptions.travelMode.toLowerCase()}`;
+    
+    // 高速道路や有料道路を避けるオプション
+    if (routeOptions.avoidHighways) {
+        url += '&avoid=highways';
+    }
+    if (routeOptions.avoidTolls) {
+        url += '&avoid=tolls';
+    }
     
     // 新しいタブでGoogle マップを開く
     window.open(url, '_blank');
