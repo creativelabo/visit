@@ -348,9 +348,9 @@ async function recognizeAddressesWithGemini(imageData) {
         // Base64形式の画像データからBase64エンコード部分のみを抽出
         const base64Image = imageData.split(',')[1];
         
-        // Gemini APIへのリクエストを準備
+        // Gemini APIへのリクエストを準備 - 新しいモデルを使用
         const apiKey = GEMINI_API_KEY; 
-        const apiUrl = 'https://generativelanguage.googleapis.com/v1/models/gemini-pro-vision:generateContent';
+        const apiUrl = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
         
         const payload = {
             contents: [
@@ -374,6 +374,8 @@ async function recognizeAddressesWithGemini(imageData) {
             }
         };
         
+        console.log('Gemini APIリクエスト送信中...');
+        
         // APIリクエストを送信
         const response = await fetch(`${apiUrl}?key=${apiKey}`, {
             method: 'POST',
@@ -384,13 +386,29 @@ async function recognizeAddressesWithGemini(imageData) {
         });
         
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`API エラー: ${errorData.error?.message || response.statusText}`);
+            const errorText = await response.text();
+            console.error('API Error Response:', errorText);
+            try {
+                const errorData = JSON.parse(errorText);
+                throw new Error(`API エラー: ${errorData.error?.message || response.statusText}`);
+            } catch (e) {
+                throw new Error(`API エラー (${response.status}): ${response.statusText || errorText}`);
+            }
         }
         
         // レスポンスを解析
         const data = await response.json();
-        const recognizedText = data.candidates[0].content.parts[0].text;
+        console.log('Gemini APIレスポンス:', data);
+        
+        let recognizedText = '';
+        // 新しいモデルでは応答の構造が変わっている可能性があるため、応答構造を確認
+        if (data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts) {
+            recognizedText = data.candidates[0].content.parts[0].text || '';
+        } else {
+            console.warn('予期しない応答形式:', data);
+            // フォールバック - 応答構造が変わっている場合に対応
+            recognizedText = JSON.stringify(data);
+        }
         
         // 認識されたテキストから住所リストを抽出
         // 改行で分割して各行を取得
@@ -405,7 +423,7 @@ async function recognizeAddressesWithGemini(imageData) {
     } catch (error) {
         console.error('Gemini API エラー:', error);
         // エラーが発生した場合は、テスト用のモックデータを返す
-        alert('画像認識中にエラーが発生しました。テスト用の住所を使用します。');
+        alert('画像認識中にエラーが発生しました: ' + error.message + '\nテスト用の住所を使用します。');
         return [
             "京都市北区上賀茂豊田町３５－１",
             "京都市北区上賀茂前田町２２",
