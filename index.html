@@ -294,6 +294,8 @@ async function captureImage() {
     document.getElementById('errorMessage').style.display = 'none';
     
     try {
+        console.log('撮影プロセス開始');
+        
         // キャンバスに現在のビデオフレームを描画
         canvas.width = videoElement.videoWidth;
         canvas.height = videoElement.videoHeight;
@@ -304,35 +306,33 @@ async function captureImage() {
         capturedImage.src = imageData;
         capturedImage.style.display = 'block';
         
-        // 本番環境設定 - デバッグモードを切り替え
-        const useDebugMode = false; // 本番環境の場合はfalse、テスト時はtrue
+        console.log('画像を撮影しました。画像サイズ:', Math.round(imageData.length / 1024), 'KB');
         
-        let recognizedAddresses;
-        if (useDebugMode) {
-            console.log("画像を撮影しました。デバッグモードでモックデータを使用します...");
-            // モックデータ
-            recognizedAddresses = [
-                "京都市北区上賀茂豊田町３５－１",
-                "京都市北区上賀茂前田町２２",
-                "京都市右京区嵯峨天竜寺造路町６－２",
-                "京都市東山区本町１８丁目"
-            ];
-        } else {
-            // 実際のGemini API呼び出し
-            console.log("画像を撮影しました。Gemini APIで住所を認識します...");
-            recognizedAddresses = await recognizeAddressesWithGemini(imageData);
+        // 実際のGemini API呼び出し
+        console.log('Gemini APIで住所を認識します...');
+        try {
+            const recognizedAddresses = await recognizeAddressesWithGemini(imageData);
+            console.log('API呼び出し完了。認識結果:', recognizedAddresses);
+            
+            // 認識された住所をテキストエリアに表示
+            document.getElementById('addressesTextarea').value = recognizedAddresses.join('\n');
+            
+            // 処理完了
+            document.getElementById('loadingCapture').style.display = 'none';
+            document.getElementById('captureButton').disabled = false;
+            
+            // ステップ2に進む
+            document.getElementById('step1').classList.add('hidden');
+            document.getElementById('step2').classList.remove('hidden');
+        } catch (apiError) {
+            console.error('API呼び出しエラー:', apiError);
+            document.getElementById('errorMessage').innerHTML = `住所認識エラー: ${apiError.message}`;
+            document.getElementById('errorMessage').style.display = 'block';
+            
+            // 処理完了（エラー状態）
+            document.getElementById('loadingCapture').style.display = 'none';
+            document.getElementById('captureButton').disabled = false;
         }
-        
-        // 認識された住所をテキストエリアに表示
-        document.getElementById('addressesTextarea').value = recognizedAddresses.join('\n');
-        
-        // 処理完了
-        document.getElementById('loadingCapture').style.display = 'none';
-        document.getElementById('captureButton').disabled = false;
-        
-        // ステップ2に進む
-        document.getElementById('step1').classList.add('hidden');
-        document.getElementById('step2').classList.remove('hidden');
     } catch (error) {
         console.error('画像処理エラー:', error);
         document.getElementById('loadingCapture').style.display = 'none';
@@ -350,7 +350,11 @@ async function recognizeAddressesWithGemini(imageData) {
         
         // Gemini APIへのリクエストを準備 - 新しいモデルを使用
         const apiKey = GEMINI_API_KEY; 
+        // モデルを最新のものに更新
         const apiUrl = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
+        
+        console.log('使用するAPIキー:', apiKey);
+        console.log('使用するAPIエンドポイント:', apiUrl);
         
         const payload = {
             contents: [
@@ -374,9 +378,11 @@ async function recognizeAddressesWithGemini(imageData) {
             }
         };
         
-        console.log('Gemini APIリクエスト送信中...');
+        console.log('APIリクエスト送信準備完了');
+        console.log('リクエストのペイロード:', JSON.stringify(payload).substring(0, 200) + '...');
         
         // APIリクエストを送信
+        console.log('APIリクエスト送信開始...');
         const response = await fetch(`${apiUrl}?key=${apiKey}`, {
             method: 'POST',
             headers: {
@@ -384,46 +390,84 @@ async function recognizeAddressesWithGemini(imageData) {
             },
             body: JSON.stringify(payload)
         });
+        console.log('APIレスポンス受信:', response.status, response.statusText);
         
+        // エラーレスポンスの詳細な処理
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('API Error Response:', errorText);
+            console.error('API エラーレスポンス全文:', errorText);
+            
             try {
                 const errorData = JSON.parse(errorText);
-                throw new Error(`API エラー: ${errorData.error?.message || response.statusText}`);
-            } catch (e) {
-                throw new Error(`API エラー (${response.status}): ${response.statusText || errorText}`);
+                console.error('JSON解析されたエラー:', errorData);
+                
+                // エラーの詳細情報を取得
+                const errorMessage = errorData.error?.message || 'エラーメッセージなし';
+                const errorCode = errorData.error?.code || response.status;
+                const errorStatus = errorData.error?.status || response.statusText;
+                const errorDetails = errorData.error?.details || [];
+                
+                console.error('エラーコード:', errorCode);
+                console.error('エラーステータス:', errorStatus);
+                console.error('エラーメッセージ:', errorMessage);
+                console.error('エラー詳細:', errorDetails);
+                
+                // アラートで表示
+                alert(`Gemini API エラー詳細:\n
+                コード: ${errorCode}\n
+                ステータス: ${errorStatus}\n
+                メッセージ: ${errorMessage}\n
+                詳細: ${JSON.stringify(errorDetails)}`);
+                
+                throw new Error(`API エラー: ${errorMessage}`);
+            } catch (parseError) {
+                console.error('JSONパースエラー:', parseError);
+                console.error('生のエラーテキスト:', errorText);
+                
+                // アラートで表示
+                alert(`Gemini API エラー (JSONパース失敗):\n
+                ステータス: ${response.status} ${response.statusText}\n
+                レスポンス: ${errorText.substring(0, 200)}...`);
+                
+                throw new Error(`API エラー (${response.status}): ${response.statusText}`);
             }
         }
         
-        // レスポンスを解析
+        // 成功レスポンスの処理
         const data = await response.json();
-        console.log('Gemini APIレスポンス:', data);
+        console.log('API成功レスポンス:', data);
         
         let recognizedText = '';
-        // 新しいモデルでは応答の構造が変わっている可能性があるため、応答構造を確認
+        // レスポンス構造の確認と取得
         if (data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts) {
-            recognizedText = data.candidates[0].content.parts[0].text || '';
+            const parts = data.candidates[0].content.parts;
+            if (parts.length > 0 && parts[0].text) {
+                recognizedText = parts[0].text;
+                console.log('認識されたテキスト:', recognizedText);
+            } else {
+                console.warn('テキストが見つかりません:', parts);
+                recognizedText = JSON.stringify(parts);
+            }
         } else {
             console.warn('予期しない応答形式:', data);
-            // フォールバック - 応答構造が変わっている場合に対応
             recognizedText = JSON.stringify(data);
         }
         
         // 認識されたテキストから住所リストを抽出
-        // 改行で分割して各行を取得
         const addresses = recognizedText
             .split('\n')
             .map(line => line.trim())
             .filter(line => line && !line.startsWith('- ') && !line.startsWith('* ') && !line.startsWith('#'));
         
-        console.log('認識された住所:', addresses);
+        console.log('抽出された住所リスト:', addresses);
         
         return addresses;
     } catch (error) {
-        console.error('Gemini API エラー:', error);
-        // エラーが発生した場合は、テスト用のモックデータを返す
-        alert('画像認識中にエラーが発生しました: ' + error.message + '\nテスト用の住所を使用します。');
+        console.error('Gemini API 処理中の例外:', error);
+        // エラーの詳細情報をアラートで表示
+        alert(`Gemini API 処理中のエラー: ${error.message}\n詳細はブラウザのコンソールを確認してください`);
+        
+        // エラーが発生した場合でも、テスト用のモックデータを返して処理を継続
         return [
             "京都市北区上賀茂豊田町３５－１",
             "京都市北区上賀茂前田町２２",
