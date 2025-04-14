@@ -484,39 +484,59 @@ async function recognizeAddressesWithGemini(imageData) {
     }
 }
         
-// 位置情報取得関数 - シンプル版
+// 現在地取得の改善 - スマホ対応版
 async function initGeolocation() {
     return new Promise((resolve, reject) => {
+        // デバッグ情報
+        console.log('位置情報取得処理を開始します');
+        
         if (!navigator.geolocation) {
-            reject(new Error('位置情報がサポートされていません'));
+            console.error('位置情報APIがサポートされていません');
+            // デフォルト位置を返す
+            resolve({ lat: 34.9858, lng: 135.7588 });
             return;
         }
         
-        console.log('位置情報を取得します...');
+        // スマホでの位置情報取得成功のためのオプション
+        const options = {
+            enableHighAccuracy: true,  // 高精度モード
+            timeout: 15000,            // 15秒のタイムアウト
+            maximumAge: 0              // キャッシュしない
+        };
         
-        // 位置情報の取得
+        // 現在位置取得
         navigator.geolocation.getCurrentPosition(
-            // 成功時
-            (position) => {
-                currentPosition = {
+            // 成功コールバック
+            function(position) {
+                console.log('★位置情報取得成功:', position);
+                
+                // 現在位置を明示的に設定
+                const location = {
                     lat: position.coords.latitude,
                     lng: position.coords.longitude
                 };
-                console.log('現在位置の取得に成功しました:', currentPosition);
-                locationInitialized = true;
-                resolve(currentPosition);
+                
+                // グローバル変数に設定（これが重要）
+                currentPosition = location;
+                
+                console.log('現在位置を設定:', currentPosition);
+                resolve(location);
             },
-            // エラー時
-            (error) => {
-                console.warn('位置情報の取得に失敗しました:', error);
-                reject(error); // エラーを返す（デフォルト位置を設定しない）
+            // エラーコールバック
+            function(error) {
+                console.warn('位置情報取得エラー:', error);
+                
+                // デフォルト位置を使用
+                const defaultPosition = { lat: 34.9858, lng: 135.7588 }; // 京都駅
+                console.log('デフォルト位置を使用:', defaultPosition);
+                
+                // グローバル変数に設定
+                currentPosition = defaultPosition;
+                
+                resolve(defaultPosition);
             },
             // オプション
-            {
-                enableHighAccuracy: true, // 高精度
-                timeout: 10000,          // 10秒
-                maximumAge: 0            // キャッシュを使用しない
-            }
+            options
         );
     });
 }
@@ -694,10 +714,10 @@ async function geocodeAndOptimizeAddresses() {
             throw new Error("有効な住所が見つかりませんでした。");
         }
         
-        // 最適化されたルートを計算 - 元のアルゴリズムを使用
-        console.log("元の最適化アルゴリズムを使用してルートを計算します");
-        optimizedAddresses = nearestNeighborAlgorithm(currentPosition, locations);
-        console.log("最適化されたルート:", optimizedAddresses);
+       // 最適化されたルートを計算
+console.log("改善アルゴリズムでルートを最適化します。開始地点:", currentPosition);
+optimizedAddresses = improvedNearestNeighborAlgorithm(currentPosition, locations);
+console.log("最適化されたルート:", optimizedAddresses);
         
         // マップを表示
         document.getElementById('map').style.display = 'block';
@@ -837,6 +857,95 @@ function nearestNeighborAlgorithm(start, locations) {
     
     console.log("最適化されたルート:", route);
     return route;
+}
+
+// 最適なルートを計算するための改良アルゴリズム
+function improvedNearestNeighborAlgorithm(start, locations) {
+    // 空のロケーションリストのチェック
+    if (!locations || locations.length === 0) {
+        console.warn("最適化対象の地点がありません");
+        return [];
+    }
+    
+    console.log("ルート最適化開始 - 開始地点:", start);
+    console.log("最適化対象の地点数:", locations.length);
+    
+    // 各地点の情報をデバッグ表示
+    locations.forEach((loc, idx) => {
+        console.log(`地点${idx+1}: ${loc.originalAddress || loc.formattedAddress || '不明'} @ (${loc.lat}, ${loc.lng})`);
+    });
+    
+    // 未訪問地点のコピーを作成
+    const unvisited = [...locations];
+    // 最適化されたルート
+    const route = [];
+    // 現在地（開始地点からスタート）
+    let current = { ...start };
+    
+    // すべての地点を訪問するまで繰り返す
+    while (unvisited.length > 0) {
+        // 現在地から最も近い未訪問地点を見つける
+        let nearestIndex = -1;
+        let minDistance = Infinity;
+        
+        for (let i = 0; i < unvisited.length; i++) {
+            const distance = haversineDistance(
+                current.lat, current.lng,
+                unvisited[i].lat, unvisited[i].lng
+            );
+            
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestIndex = i;
+            }
+        }
+        
+        // 最近点が見つかった場合
+        if (nearestIndex >= 0) {
+            // 次の訪問先
+            const next = unvisited[nearestIndex];
+            // ルートに追加
+            route.push(next);
+            // 現在地を更新
+            current = next;
+            // 訪問済みリストから削除
+            unvisited.splice(nearestIndex, 1);
+            
+            console.log(`次の訪問先: ${next.originalAddress || next.formattedAddress || '不明'} (距離: ${minDistance.toFixed(2)}km)`);
+        } else {
+            console.warn("最近点が見つかりませんでした");
+            break;
+        }
+    }
+    
+    // 最終ルートをログ表示
+    console.log("最適化されたルート:");
+    route.forEach((loc, idx) => {
+        console.log(`${idx+1}: ${loc.originalAddress || loc.formattedAddress || '不明'}`);
+    });
+    
+    return route;
+}
+
+// ハバーサイン距離計算（地球上の2点間の距離をより正確に計算）
+function haversineDistance(lat1, lon1, lat2, lon2) {
+    // 地球の半径（km）
+    const R = 6371;
+    
+    // 緯度・経度をラジアンに変換
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    
+    // ハバーサイン公式
+    const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const distance = R * c;
+    
+    return distance;
 }
 
 // ルート最適化のオプションを設定する関数を追加
