@@ -477,7 +477,7 @@ async function recognizeAddressesWithGemini(imageData) {
     }
 }
         
-// processAddresses関数の修正 - 位置情報取得のエラー処理改善
+// processAddresses関数の修正
 function processAddresses() {
     document.getElementById('loadingProcess').style.display = 'block';
     document.getElementById('processAddressesButton').disabled = true;
@@ -498,7 +498,13 @@ function processAddresses() {
     // デフォルト位置を設定 (京都市中心付近)
     currentPosition = { lat: 35.0116, lng: 135.7681 };
 
+    // 位置情報取得を改善
     if (navigator.geolocation) {
+        // 位置情報取得前にユーザーにメッセージを表示
+        document.getElementById('errorMessage').innerHTML = 
+            '現在地を取得しています...位置情報へのアクセスを許可してください。';
+        document.getElementById('errorMessage').style.display = 'block';
+        
         navigator.geolocation.getCurrentPosition(
             // 成功時
             function(position) {
@@ -507,6 +513,7 @@ function processAddresses() {
                     lng: position.coords.longitude
                 };
                 console.log("現在位置を取得しました:", currentPosition);
+                document.getElementById('errorMessage').style.display = 'none';
                 initializeMapAndProcess();
             },
             // エラー時
@@ -518,7 +525,7 @@ function processAddresses() {
                 let errorMessage = "";
                 switch(error.code) {
                     case error.PERMISSION_DENIED:
-                        errorMessage = "位置情報へのアクセスが拒否されました。デフォルトの位置情報を使用します。";
+                        errorMessage = "位置情報へのアクセスが拒否されました。現在地を出発点にするには、位置情報へのアクセスを許可してください。";
                         break;
                     case error.POSITION_UNAVAILABLE:
                         errorMessage = "位置情報が利用できません。デフォルトの位置情報を使用します。";
@@ -531,17 +538,16 @@ function processAddresses() {
                         break;
                 }
                     
-                document.getElementById('errorMessage').innerHTML = 
-                    '位置情報が許可されていないため、京都市中心をデフォルト位置として使用します。';
+                document.getElementById('errorMessage').innerHTML = errorMessage;
                 document.getElementById('errorMessage').style.display = 'block';
                     
                 // デフォルト位置でも続行
                 initializeMapAndProcess();
             },
             {
-                enableHighAccuracy: true,
-                timeout: 5000,
-                maximumAge: 0
+                enableHighAccuracy: true,  // 高精度の位置情報を要求
+                timeout: 10000,           // タイムアウトを10秒に延長
+                maximumAge: 0             // キャッシュした位置情報を使用しない
             }
         );
     } else {
