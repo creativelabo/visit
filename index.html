@@ -668,7 +668,7 @@ function initMap() {
     }
 }
         
-// 2. geocodeAndOptimizeAddresses 関数の修正 - デバッグ情報強化
+// geocodeAndOptimizeAddresses 関数の修正
 async function geocodeAndOptimizeAddresses() {
     try {
         // APIが読み込まれているか確認
@@ -676,11 +676,17 @@ async function geocodeAndOptimizeAddresses() {
             throw new Error("Google Maps APIが正しく読み込まれていません。");
         }
         
-        // currentPositionが未設定の場合、デフォルト値を設定
+        // currentPositionのチェック - 未設定の場合はエラーを表示して処理を中止
         if (!currentPosition) {
-            console.log("currentPositionが未設定のため、デフォルト位置を使用します");
-            currentPosition = { lat: 35.0116, lng: 135.7681 }; // 京都市中心付近
+            console.error("現在位置が取得できていません。処理を中止します。");
+            document.getElementById('errorMessage').innerHTML = "現在位置が取得できていません。位置情報を許可してください。";
+            document.getElementById('errorMessage').style.display = 'block';
+            document.getElementById('loadingProcess').style.display = 'none';
+            document.getElementById('processAddressesButton').disabled = false;
+            return;
         }
+        
+        console.log("処理に使用する現在位置:", currentPosition);
         
         // geocoderの初期化
         if (!geocoder) {
@@ -726,7 +732,7 @@ async function geocodeAndOptimizeAddresses() {
         }
         
         // 最適化されたルートを計算
-        console.log("ルートを最適化します...");
+        console.log("ルートを最適化します... 出発地:", currentPosition);
         optimizedAddresses = nearestNeighborAlgorithm(currentPosition, locations);
         console.log("最適化されたルート:", optimizedAddresses);
         
@@ -761,7 +767,7 @@ async function geocodeAndOptimizeAddresses() {
     }
 }
         
-// 1. geocodeAddress 関数の修正 - より堅牢な住所変換
+// geocodeAddress 関数の修正 - デフォルト位置を使用しない
 function geocodeAddress(address) {
     return new Promise((resolve, reject) => {
         try {
@@ -778,24 +784,7 @@ function geocodeAddress(address) {
                 }
             }
             
-            // テスト用固定位置マッピング（本番では削除）
-            const addressMapping = {
-                "京都市北区上賀茂豊田町３５－１": { lat: 35.0613, lng: 135.7502 },
-                "京都市北区上賀茂前田町２２": { lat: 35.0629, lng: 135.7534 },
-                "京都市右京区嵯峨天竜寺造路町６－２": { lat: 35.0162, lng: 135.6745 },
-                "京都市東山区本町１８丁目": { lat: 34.9957, lng: 135.7807 }
-            };
-            
-            // テスト用固定位置があればそれを使用
-            if (addressMapping[address]) {
-                const location = {
-                    ...addressMapping[address],
-                    formattedAddress: address
-                };
-                console.log(`テスト用固定位置を使用: ${address} => ${location.lat}, ${location.lng}`);
-                resolve(location);
-                return;
-            }
+            // テスト用固定位置マッピングを削除（デフォルト位置を使わない）
             
             // 以下は通常のジオコーディング処理...
             // 住所の前処理 - 郵便番号があれば分離し、日本の住所であることを明示
@@ -823,17 +812,15 @@ function geocodeAddress(address) {
                     console.log(`住所変換成功: ${address} => ${location.lat}, ${location.lng}`);
                     resolve(location);
                 } else {
-                    // 変換に失敗した場合は固定値を使用（テスト用）
-                    console.warn(`変換失敗 (${status}): ${address}, テスト用固定位置を使用`);
-                    const defaultLocation = { lat: 35.0116, lng: 135.7681, formattedAddress: address };
-                    resolve(defaultLocation);
+                    // 変換に失敗した場合はエラーを返す（デフォルト位置を使わない）
+                    console.error(`変換失敗 (${status}): ${address}`);
+                    reject(new Error(`住所「${address}」の変換に失敗しました: ${status}`));
                 }
             });
         } catch (error) {
             console.error("geocodeAddress実行エラー:", error);
-            // エラー時もデフォルト位置を返す（テスト用）
-            const defaultLocation = { lat: 35.0116, lng: 135.7681, formattedAddress: address };
-            resolve(defaultLocation);
+            // エラーを返す（デフォルト位置を使わない）
+            reject(error);
         }
     });
 }
