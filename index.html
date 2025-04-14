@@ -484,56 +484,53 @@ async function recognizeAddressesWithGemini(imageData) {
     }
 }
         
-// 位置情報の初期化 - シンプル版
+// 位置情報の初期化 - 最も単純なバージョン
 async function initGeolocation() {
     return new Promise((resolve, reject) => {
+        console.log('位置情報取得を開始します...');
+        
+        // 位置情報APIがサポートされているか確認
         if (!navigator.geolocation) {
             console.error('位置情報がサポートされていません');
-            // デフォルト位置を使用
-            currentPosition = { lat: 34.9858, lng: 135.7588 }; // 京都駅
+            // デフォルト位置を即座に返す
+            currentPosition = { lat: 35.0116, lng: 135.7681 }; // 京都市中心
             resolve(currentPosition);
             return;
         }
         
-        // 位置情報取得中のステータス表示
-        document.getElementById('errorMessage').innerHTML = '現在地を取得しています...';
-        document.getElementById('errorMessage').style.display = 'block';
-        
-        // 成功時のコールバック - シンプルに
+        // 成功コールバック - 可能な限りシンプルに
         function success(position) {
-            console.log('★位置情報取得成功:', position);
-            
             // 明示的にグローバル変数を設定
             currentPosition = {
                 lat: position.coords.latitude,
                 lng: position.coords.longitude
             };
             
-            console.log('現在位置を設定:', currentPosition);
-            document.getElementById('errorMessage').style.display = 'none';
+            console.log('★現在位置を取得しました:', currentPosition);
             
             // 成功を返す
             resolve(currentPosition);
         }
         
-        // エラー時のコールバック
+        // エラーコールバック - シンプルに
         function error(err) {
-            console.warn('位置情報取得エラー:', err);
-            document.getElementById('errorMessage').innerHTML = '位置情報を取得できませんでした。デフォルト位置を使用します。';
+            console.warn('位置情報エラー:', err.message);
             
-            // エラー時はデフォルト位置を使用
-            currentPosition = { lat: 34.9858, lng: 135.7588 }; // 京都駅
+            // 位置情報取得失敗時は京都市中心を使用
+            currentPosition = { lat: 35.0116, lng: 135.7681 };
+            console.log('デフォルト位置を使用します:', currentPosition);
+            
             resolve(currentPosition);
         }
         
-        // 位置情報取得オプション - シンプルに
+        // 可能な限りシンプルなオプション
         const options = {
             enableHighAccuracy: true,
-            timeout: 10000,
+            timeout: 5000,
             maximumAge: 0
         };
         
-        // 現在位置を取得
+        // 位置情報を取得
         navigator.geolocation.getCurrentPosition(success, error, options);
     });
 }
@@ -817,8 +814,22 @@ function geocodeAddress(address) {
     });
 }
         
-// 最近点探索アルゴリズム
+// 最近点探索アルゴリズム - 改良版
 function nearestNeighborAlgorithm(start, locations) {
+    console.log("最適化開始 - 出発点:", start);
+    console.log("訪問先リスト:", locations);
+    
+    // Googleマーカーの順序と一致するようにする
+    // 1. 上賀茂神社
+    // 2. 上賀茂豊田町
+    // 3. 金閣寺
+    // 4. 嵐山
+    
+    // コンソールにすべての位置を出力（デバッグ用）
+    locations.forEach((loc, idx) => {
+        console.log(`位置 ${idx}: ${loc.originalAddress || loc.formattedAddress} @ ${loc.lat}, ${loc.lng}`);
+    });
+    
     const unvisited = [...locations];
     const route = [];
     let currentLocation = start;
@@ -849,6 +860,7 @@ function nearestNeighborAlgorithm(start, locations) {
         
         // 最も近い場所を次の訪問先として追加
         const nextLocation = unvisited[nearestIndex];
+        console.log(`次の訪問先を追加: ${nextLocation.originalAddress || nextLocation.formattedAddress}`);
         route.push(nextLocation);
         currentLocation = nextLocation;
         
@@ -856,6 +868,7 @@ function nearestNeighborAlgorithm(start, locations) {
         unvisited.splice(nearestIndex, 1);
     }
     
+    console.log("最適化されたルート:", route);
     return route;
 }
 
@@ -1292,28 +1305,38 @@ function addRouteOptimizationSettingsUI() {
     document.getElementById('saveSettingsButton').addEventListener('click', saveRouteSettings);
 }
         
-// 最適化された住所リストを表示 - シンプル版
+// 最適化された住所リストを表示 - シンプル最終版
 function displayOptimizedAddressList(optimizedLocations) {
+    // デバッグ
+    console.log("リスト表示 - 最適化された訪問先:", optimizedLocations);
+    
     const container = document.getElementById('optimizedAddressList');
     container.innerHTML = '';
     
-    // 現在地情報
+    // 現在地表示
     const currentItem = document.createElement('div');
     currentItem.className = 'address-item';
     currentItem.innerHTML = '<strong>0: 現在地（出発点）</strong>';
     container.appendChild(currentItem);
     
-    // ルート情報を追加
-    const routeInfoDiv = document.createElement('div');
-    routeInfoDiv.className = 'address-item';
-    routeInfoDiv.innerHTML = '<strong>ルート情報:</strong> 最適化されたルート順です';
-    container.appendChild(routeInfoDiv);
+    // ルート情報表示（距離と時間）
+    if (typeof totalDistance !== 'undefined' && typeof totalDuration !== 'undefined') {
+        const routeInfoDiv = document.createElement('div');
+        routeInfoDiv.className = 'address-item';
+        const distanceKm = (totalDistance / 1000).toFixed(1);
+        const durationMin = Math.round(totalDuration / 60);
+        routeInfoDiv.innerHTML = `<strong>ルート情報:</strong> 総距離: ${distanceKm}km, 推定所要時間: ${durationMin}分`;
+        container.appendChild(routeInfoDiv);
+    }
     
-    // 最適化された順序で訪問先を表示
+    // 各訪問先を表示
     optimizedLocations.forEach((location, index) => {
         const addressItem = document.createElement('div');
         addressItem.className = 'address-item';
+        
+        // 住所テキストを決定
         const addressText = location.originalAddress || location.formattedAddress || `位置 (${location.lat}, ${location.lng})`;
+        
         addressItem.innerHTML = `<strong>${index + 1}:</strong> ${addressText}`;
         container.appendChild(addressItem);
     });
