@@ -484,136 +484,91 @@ async function recognizeAddressesWithGemini(imageData) {
     }
 }
         
-// 位置情報の初期化 - 最も単純なバージョン
-async function initGeolocation() {
-    return new Promise((resolve, reject) => {
-        console.log('位置情報取得を開始します...');
-        
-        // 位置情報APIがサポートされているか確認
-        if (!navigator.geolocation) {
-            console.error('位置情報がサポートされていません');
-            // デフォルト位置を即座に返す
-            currentPosition = { lat: 35.0116, lng: 135.7681 }; // 京都市中心
-            resolve(currentPosition);
-            return;
-        }
-        
-        // 成功コールバック - 可能な限りシンプルに
-        function success(position) {
-            // 明示的にグローバル変数を設定
-            currentPosition = {
-                lat: position.coords.latitude,
-                lng: position.coords.longitude
-            };
-            
-            console.log('★現在位置を取得しました:', currentPosition);
-            
-            // 成功を返す
-            resolve(currentPosition);
-        }
-        
-        // エラーコールバック - シンプルに
-        function error(err) {
-            console.warn('位置情報エラー:', err.message);
-            
-            // 位置情報取得失敗時は京都市中心を使用
-            currentPosition = { lat: 35.0116, lng: 135.7681 };
-            console.log('デフォルト位置を使用します:', currentPosition);
-            
-            resolve(currentPosition);
-        }
-        
-        // 可能な限りシンプルなオプション
-        const options = {
-            enableHighAccuracy: true,
-            timeout: 5000,
-            maximumAge: 0
+// 位置情報取得関数 - シンプル版
+async function getCurrentLocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('位置情報がサポートされていません'));
+      return;
+    }
+    
+    // 位置情報取得中のメッセージ表示
+    document.getElementById('errorMessage').innerHTML = '現在地を取得しています...';
+    document.getElementById('errorMessage').style.display = 'block';
+    
+    // 位置情報を取得
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        // 現在位置を設定
+        const location = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
         };
         
-        // 位置情報を取得
-        navigator.geolocation.getCurrentPosition(success, error, options);
-    });
+        // グローバル変数に保存
+        currentPosition = location;
+        
+        // メッセージを非表示
+        document.getElementById('errorMessage').style.display = 'none';
+        
+        console.log('現在位置の取得に成功:', location);
+        resolve(location);
+      },
+      (error) => {
+        console.error('位置情報の取得に失敗:', error);
+        reject(error);
+      },
+      {
+        enableHighAccuracy: true,  // 高精度を要求
+        timeout: 10000,            // 10秒タイムアウト
+        maximumAge: 0              // キャッシュを使用しない
+      }
+    );
+  });
 }
 
-// 住所処理関数 - スマホ対応強化版
+// 住所処理関数
 async function processAddresses() {
-    document.getElementById('loadingProcess').style.display = 'block';
-    document.getElementById('processAddressesButton').disabled = true;
-    document.getElementById('errorMessage').style.display = 'none';
+  document.getElementById('loadingProcess').style.display = 'block';
+  document.getElementById('processAddressesButton').disabled = true;
+  document.getElementById('errorMessage').style.display = 'none';
 
-    // 入力された住所を取得
-    const addressText = document.getElementById('addressesTextarea').value.trim();
-    if (!addressText) {
-        alert("住所を入力してください");
-        document.getElementById('loadingProcess').style.display = 'none';
-        document.getElementById('processAddressesButton').disabled = false;
-        return;
-    }
+  // 入力された住所を取得
+  const addressText = document.getElementById('addressesTextarea').value.trim();
+  if (!addressText) {
+    alert("住所を入力してください");
+    document.getElementById('loadingProcess').style.display = 'none';
+    document.getElementById('processAddressesButton').disabled = false;
+    return;
+  }
 
-    // 住所をリスト化
-    addresses = addressText.split('\n').filter(address => address.trim() !== "");
+  // 住所をリスト化
+  addresses = addressText.split('\n').filter(address => address.trim() !== "");
+  
+  if (addresses.length === 0) {
+    alert("有効な住所が入力されていません");
+    document.getElementById('loadingProcess').style.display = 'none';
+    document.getElementById('processAddressesButton').disabled = false;
+    return;
+  }
+
+  try {
+    // 最初にユーザーの現在位置を取得する
+    currentPosition = await getCurrentLocation();
     
-    if (addresses.length === 0) {
-        alert("有効な住所が入力されていません");
-        document.getElementById('loadingProcess').style.display = 'none';
-        document.getElementById('processAddressesButton').disabled = false;
-        return;
+    // Google Mapsの初期化を行う
+    if (typeof google !== 'undefined' && google.maps) {
+      initMap();
+    } else {
+      loadGoogleMapsApi();
     }
-
-    try {
-        // 現在位置を取得する前に、ローディングメッセージを表示
-        document.getElementById('errorMessage').innerHTML = '現在地を取得しています...';
-        document.getElementById('errorMessage').style.display = 'block';
-        
-        // 位置情報取得の直前にログ
-        console.log('位置情報取得を開始します...');
-        
-        // 位置情報の取得
-        currentPosition = await initGeolocation();
-        
-        console.log('★processAddresses内: 現在位置を取得しました:', currentPosition);
-        document.getElementById('errorMessage').style.display = 'none';
-                
-        // Google Maps APIが読み込まれているか確認して初期化
-        if (typeof google !== 'undefined' && google.maps) {
-            console.log('Google Maps APIが既に読み込まれています');
-            initMap();
-        } else {
-            console.log('Google Maps APIを読み込みます');
-            loadGoogleMapsApi();
-        }
-    } catch (error) {
-        console.error('位置情報の取得に失敗しました:', error);
-        
-        // エラーメッセージを表示
-        let errorMessage = '位置情報の取得中にエラーが発生しました: ' + error.message;
-        if (error.code) {
-            switch (error.code) {
-                case 1: // PERMISSION_DENIED
-                    errorMessage = '位置情報の使用が拒否されました。このアプリを使用するには位置情報へのアクセスを許可してください。';
-                    break;
-                case 2: // POSITION_UNAVAILABLE
-                    errorMessage = '位置情報が利用できません。デフォルト位置を使用します。';
-                    break;
-                case 3: // TIMEOUT
-                    errorMessage = '位置情報の取得がタイムアウトしました。デフォルト位置を使用します。';
-                    break;
-            }
-        }
-        
-        document.getElementById('errorMessage').innerHTML = errorMessage;
-        document.getElementById('errorMessage').style.display = 'block';
-        
-        // デフォルト位置（京都駅）を設定して処理を続行
-        currentPosition = { lat: 34.9858, lng: 135.7588 };
-        console.log('デフォルト位置を使用します:', currentPosition);
-        
-        if (typeof google !== 'undefined' && google.maps) {
-            initMap();
-        } else {
-            loadGoogleMapsApi();
-        }
-    }
+  } catch (error) {
+    // 位置情報の取得に失敗した場合のエラーメッセージ
+    console.error('位置情報の取得に失敗しました:', error);
+    alert('現在地を取得できませんでした。位置情報の使用を許可してください。');
+    document.getElementById('loadingProcess').style.display = 'none';
+    document.getElementById('processAddressesButton').disabled = false;
+  }
 }
 
 // 地図初期化と処理を進める共通関数
