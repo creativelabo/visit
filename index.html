@@ -178,15 +178,15 @@
 
             <div id="locationPermissionCard" style="text-align: center; margin-bottom: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #ddd;">
                 <p><strong>現在地を取得するには位置情報の許可が必要です</strong></p>
-                <button id="getLocationPermissionBtn" style="background-color: #34a853; margin-bottom: 10px;">位置情報へのアクセスを許可する</button>
-                <div id="locationHelpInfo" style="margin-top: 5px; font-size: 12px; color: #666;">
+                <button id="getLocationPermissionBtn" style="background-color: #34a853; color: white; width: 100%; padding: 10px; border: none; border-radius: 4px; margin-bottom: 10px; cursor: pointer;">位置情報へのアクセスを許可する</button>
+                <p id="locationStatus">位置情報: 未取得</p>
+                <div style="margin-top: 5px; font-size: 12px; color: #666; text-align: left;">
                     <p>位置情報が許可されない場合：</p>
-                    <ul style="text-align: left; padding-left: 20px;">
+                    <ul style="padding-left: 20px;">
                         <li>iOS: 設定 → Safari → 位置情報を確認</li>
                         <li>Android: 設定 → アプリ → Chrome → 権限</li>
                     </ul>
                 </div>
-                <p id="locationStatus">位置情報: 未取得</p>
             </div>
 
             <div class="camera-container">
@@ -266,6 +266,46 @@
                     }
                 });
             </script>
+
+<button id="resetLocationButton" style="background-color: #d93025; color: white; margin-top: 10px; width: 100%; padding: 10px; border: none; border-radius: 4px;">
+    位置情報をリセット
+</button>
+
+<script>
+    // リセットボタンのイベントリスナーを追加
+    document.getElementById('resetLocationButton').addEventListener('click', function() {
+        // ローカルストレージから位置情報を削除
+        localStorage.removeItem('currentLat');
+        localStorage.removeItem('currentLng');
+        
+        // グローバル変数をクリア
+        currentPosition = null;
+        
+        // 再度位置情報を取得
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    currentPosition = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+                    alert(`新しい位置情報を取得しました: ${currentPosition.lat.toFixed(5)}, ${currentPosition.lng.toFixed(5)}`);
+                    
+                    // ローカルストレージに保存
+                    localStorage.setItem('currentLat', currentPosition.lat);
+                    localStorage.setItem('currentLng', currentPosition.lng);
+                },
+                function(error) {
+                    alert(`位置情報の取得に失敗しました: ${error.message}`);
+                },
+                {enableHighAccuracy: true, timeout: 10000, maximumAge: 0}
+            );
+        } else {
+            alert('お使いのブラウザは位置情報をサポートしていません');
+        }
+    });
+</script>
+
         </div>
     </div>
 
@@ -284,7 +324,7 @@ let currentPosition = null;
 const GEMINI_API_KEY = 'AIzaSyCYRjUaQHt-a7zA14pLJdyJ_bZTfA2oo48';
 
 // 初期化処理の修正
-document.addEventListener('DOMContentLoaded', async function() {
+document.addEventListener('DOMContentLoaded', function() {
     // エラーメッセージを非表示に
     const errorElements = document.querySelectorAll('#errorMessage');
     errorElements.forEach(el => {
@@ -297,87 +337,41 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     console.log('ページが読み込まれました。初期化を開始します...');
     
-    // 最初に位置情報を取得（重要）
-    try {
-        console.log('先行して位置情報を取得します...');
-        
-        // 先に位置情報を取得
-        if (navigator.geolocation) {
-            // スマホ向け詳細設定
-            const positionOptions = {
-                enableHighAccuracy: true,  // 高精度モード
-                timeout: 10000,            // 10秒タイムアウト
-                maximumAge: 0              // キャッシュ不使用
-            };
-            
-            // 位置情報取得
-            navigator.geolocation.getCurrentPosition(
-                // 成功時
-                function(position) {
-                    currentPosition = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude
-                    };
-                    console.log('✅ 現在位置の先行取得に成功:', currentPosition);
-                    
-                    // 現在位置がローカルストレージに保存されていない場合のみ保存
-                    if (!localStorage.getItem('currentLat')) {
-                        localStorage.setItem('currentLat', currentPosition.lat);
-                        localStorage.setItem('currentLng', currentPosition.lng);
-                        console.log('✅ 現在位置をローカルストレージに保存しました');
-                    }
-                },
-                // エラー時
-                function(error) {
-                    console.warn('⚠️ 位置情報の先行取得に失敗:', error.code, error.message);
-                    
-                    // 保存された位置情報があれば使用
-                    const savedLat = localStorage.getItem('currentLat');
-                    const savedLng = localStorage.getItem('currentLng');
-                    
-                    if (savedLat && savedLng) {
-                        currentPosition = {
-                            lat: parseFloat(savedLat),
-                            lng: parseFloat(savedLng)
-                        };
-                        console.log('✅ 保存された位置情報を使用:', currentPosition);
-                    } else {
-                        // デフォルト位置を京都駅ではなく東京駅に変更（既存の問題回避）
-                        currentPosition = { lat: 35.6812, lng: 139.7671 };
-                        console.log('⚠️ デフォルト位置を使用:', currentPosition);
-                    }
-                },
-                // オプション
-                positionOptions
-            );
-        } else {
-            console.warn('⚠️ 位置情報APIがサポートされていません');
-            currentPosition = { lat: 35.6812, lng: 139.7671 }; // 東京駅
-        }
-    } catch (e) {
-        console.error('🛑 位置情報初期化エラー:', e);
-    }
-    
-    // 通常の初期化処理を実行
+    // カメラの初期化
     initCamera();
+    
+    // イベントリスナーの初期化
     initEventListeners();
+    
+    // 位置情報状態の表示を更新
+    updateLocationStatus();
 });
 
-// 位置情報を明示的に取得する関数
+// 位置情報を明示的に取得する関数（改良版）
 function requestLocationPermission() {
     return new Promise((resolve, reject) => {
+        console.log('位置情報許可をリクエスト中...');
+        
         if (!navigator.geolocation) {
+            console.error('位置情報APIがサポートされていません');
             reject(new Error('お使いのブラウザは位置情報をサポートしていません'));
             return;
         }
         
         // 位置情報取得のオプション
         const options = {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
+            enableHighAccuracy: true,  // 高精度モード
+            timeout: 15000,            // 15秒タイムアウト
+            maximumAge: 0              // キャッシュを使用しない
         };
         
+        // 位置情報取得前にステータス更新
+        const statusElement = document.getElementById('locationStatus');
+        if (statusElement) {
+            statusElement.textContent = '位置情報: 取得中...';
+        }
+        
+        // 位置情報取得を実行
         navigator.geolocation.getCurrentPosition(
             // 成功時
             (position) => {
@@ -386,6 +380,8 @@ function requestLocationPermission() {
                     lng: position.coords.longitude
                 };
                 
+                console.log('位置情報取得成功:', pos);
+                
                 // グローバル変数に設定
                 currentPosition = pos;
                 
@@ -393,17 +389,69 @@ function requestLocationPermission() {
                 localStorage.setItem('currentLat', pos.lat);
                 localStorage.setItem('currentLng', pos.lng);
                 
-                console.log('位置情報取得成功:', pos);
+                // ステータス表示を更新
+                if (statusElement) {
+                    statusElement.textContent = `位置情報: 取得成功 (${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)})`;
+                    statusElement.style.color = '#34a853';
+                }
+                
                 resolve(pos);
             },
             // 失敗時
             (error) => {
                 console.error('位置情報エラー:', error);
-                reject(error);
+                
+                // エラーメッセージを生成
+                let errorMsg = '';
+                switch(error.code) {
+                    case 1: 
+                        errorMsg = '位置情報へのアクセスが拒否されました';
+                        break;
+                    case 2: 
+                        errorMsg = '位置情報が取得できませんでした';
+                        break;
+                    case 3: 
+                        errorMsg = '位置情報の取得がタイムアウトしました';
+                        break;
+                    default: 
+                        errorMsg = `エラー (${error.code}): ${error.message}`;
+                }
+                
+                // ステータス表示を更新
+                if (statusElement) {
+                    statusElement.textContent = `位置情報エラー: ${errorMsg}`;
+                    statusElement.style.color = '#d93025';
+                }
+                
+                reject(new Error(errorMsg));
             },
             options
         );
     });
+}
+
+// 位置情報の状態表示を更新する関数
+function updateLocationStatus() {
+    const statusElement = document.getElementById('locationStatus');
+    if (!statusElement) return;
+    
+    // ローカルストレージから位置情報を確認
+    const savedLat = localStorage.getItem('currentLat');
+    const savedLng = localStorage.getItem('currentLng');
+    
+    if (savedLat && savedLng) {
+        statusElement.textContent = `位置情報: 取得済み (${parseFloat(savedLat).toFixed(6)}, ${parseFloat(savedLng).toFixed(6)})`;
+        statusElement.style.color = '#34a853';
+        
+        // グローバル変数に設定
+        currentPosition = {
+            lat: parseFloat(savedLat),
+            lng: parseFloat(savedLng)
+        };
+    } else {
+        statusElement.textContent = '位置情報: 未取得';
+        statusElement.style.color = '#666';
+    }
 }
         
 // カメラの初期化
@@ -443,41 +491,23 @@ function initEventListeners() {
     // ルート設定UIを追加
     addRouteOptimizationSettingsUI();
     // 位置情報許可ボタン
-document.getElementById('getLocationPermissionBtn').addEventListener('click', async function() {
+ document.getElementById('getLocationPermissionBtn').addEventListener('click', async function() {
     try {
-        const statusElement = document.getElementById('locationStatus');
-        statusElement.textContent = '位置情報: 取得中...';
-        
+        // 位置情報リクエスト
         const position = await requestLocationPermission();
-        
-        statusElement.textContent = `位置情報: 取得成功 (${position.lat.toFixed(6)}, ${position.lng.toFixed(6)})`;
-        statusElement.style.color = '#34a853';
         
         // ボタンを無効化
         this.disabled = true;
+        this.style.backgroundColor = '#cccccc';
         this.textContent = '位置情報取得済み';
         
         // 成功メッセージを表示
         alert(`現在地を取得しました。\n緯度: ${position.lat.toFixed(6)}\n経度: ${position.lng.toFixed(6)}`);
     } catch (error) {
-        let errorMsg = '';
-        if (error.code) {
-            switch(error.code) {
-                case 1: errorMsg = '位置情報へのアクセスが拒否されました。設定から許可してください。'; break;
-                case 2: errorMsg = '位置情報が取得できませんでした。'; break;
-                case 3: errorMsg = '位置情報の取得がタイムアウトしました。'; break;
-                default: errorMsg = `位置情報エラー (${error.code}): ${error.message}`;
-            }
-        } else {
-            errorMsg = error.message || '不明なエラー';
-        }
-        
-        document.getElementById('locationStatus').textContent = `位置情報エラー: ${errorMsg}`;
-        document.getElementById('locationStatus').style.color = '#d93025';
-        
-        alert(`位置情報の取得に失敗しました: ${errorMsg}`);
+        console.error('位置情報エラー:', error);
+        alert(`位置情報の取得に失敗しました: ${error.message}\n\nブラウザの設定で位置情報を許可してください。`);
     }
-});
+    });
 }
 
         
@@ -828,7 +858,7 @@ function getCurrentPositionPromise() {
   });
 }
 
-// 住所処理関数の改善版
+// 住所処理関数 - 最終版
 async function processAddresses() {
     try {
         document.getElementById('loadingProcess').style.display = 'block';
@@ -855,7 +885,7 @@ async function processAddresses() {
         }
 
         // 現在地の状態を確認
-        document.getElementById('errorMessage').textContent = '現在地を確認しています...';
+        document.getElementById('errorMessage').innerHTML = '現在地を確認しています...';
         document.getElementById('errorMessage').style.display = 'block';
         
         // ローカルストレージから位置情報を取得
@@ -870,14 +900,12 @@ async function processAddresses() {
                 lng: parseFloat(savedLng)
             };
             console.log('保存された位置情報を使用:', currentPosition);
-            document.getElementById('errorMessage').textContent = `保存された位置情報を使用: (${currentPosition.lat.toFixed(6)}, ${currentPosition.lng.toFixed(6)})`;
+            document.getElementById('errorMessage').innerHTML = `現在地: (${currentPosition.lat.toFixed(6)}, ${currentPosition.lng.toFixed(6)})`;
         } else {
-            // 位置情報がない場合、デフォルト位置を使用
-            console.log('位置情報が取得できていません。デフォルト位置を使用します。');
-            document.getElementById('errorMessage').textContent = '位置情報が取得できていないため、デフォルト位置を使用します';
-            
-            // 東京駅をデフォルト位置として使用（これまでのデフォルト京都駅を避ける）
+            // 位置情報がない場合、東京駅をデフォルト位置として使用
             currentPosition = { lat: 35.6812, lng: 139.7671 };
+            console.log('デフォルト位置（東京駅）を使用:', currentPosition);
+            document.getElementById('errorMessage').innerHTML = '位置情報が取得できていないため、デフォルト位置を使用します';
         }
         
         // Google Maps APIの初期化
@@ -890,7 +918,7 @@ async function processAddresses() {
         }
     } catch (error) {
         console.error("処理エラー:", error);
-        document.getElementById('errorMessage').textContent = 'エラーが発生しました: ' + error.message;
+        document.getElementById('errorMessage').innerHTML = 'エラーが発生しました: ' + error.message;
         document.getElementById('loadingProcess').style.display = 'none';
         document.getElementById('processAddressesButton').disabled = false;
     }
