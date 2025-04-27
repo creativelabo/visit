@@ -600,10 +600,16 @@ function getLocationQuietly() {
         // 2. 位置情報APIが利用可能か確認
         if (!navigator.geolocation) {
             console.log('位置情報APIが利用できません。デフォルト位置を使用します');
-            const defaultPos = { lat: 35.6812, lng: 139.7671 }; // 東京駅
+            // 京都駅をデフォルト位置として使用
+            const defaultPos = { lat: 34.9858, lng: 135.7588 };
             
             // グローバル変数に確実に設定
             currentPosition = defaultPos;
+            
+            // ローカルストレージにも保存
+            localStorage.setItem('currentLat', defaultPos.lat);
+            localStorage.setItem('currentLng', defaultPos.lng);
+            
             resolve(defaultPos);
             return;
         }
@@ -611,12 +617,18 @@ function getLocationQuietly() {
         // 3. 位置情報を取得（タイムアウト付き）
         const timeoutId = setTimeout(() => {
             console.log('位置情報取得がタイムアウトしました。デフォルト位置を使用します');
-            const defaultPos = { lat: 35.6812, lng: 139.7671 }; // 東京駅
+            // 京都駅をデフォルト位置として使用
+            const defaultPos = { lat: 34.9858, lng: 135.7588 };
             
             // グローバル変数に確実に設定
             currentPosition = defaultPos;
+            
+            // ローカルストレージにも保存
+            localStorage.setItem('currentLat', defaultPos.lat);
+            localStorage.setItem('currentLng', defaultPos.lng);
+            
             resolve(defaultPos);
-        }, 5000); // 5秒でタイムアウト
+        }, 10000); // 10秒でタイムアウト（スマホでも十分な時間）
         
         navigator.geolocation.getCurrentPosition(
             // 成功時
@@ -641,15 +653,21 @@ function getLocationQuietly() {
             (error) => {
                 clearTimeout(timeoutId);
                 console.log('位置情報エラー:', error.code, error.message);
-                const defaultPos = { lat: 35.6812, lng: 139.7671 }; // 東京駅
+                
+                // 京都駅をデフォルト位置として使用
+                const defaultPos = { lat: 34.9858, lng: 135.7588 };
                 
                 // グローバル変数に確実に設定
                 currentPosition = defaultPos;
                 
+                // ローカルストレージにも保存
+                localStorage.setItem('currentLat', defaultPos.lat);
+                localStorage.setItem('currentLng', defaultPos.lng);
+                
                 resolve(defaultPos);
             },
-            // オプション - より短いタイムアウトで
-            { enableHighAccuracy: true, timeout: 4000, maximumAge: 0 }
+            // オプション - より長いタイムアウトで
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
         );
     });
 }
@@ -686,9 +704,30 @@ async function processAddresses() {
         
         console.log('位置情報を取得中...');
         
-        // 静かに位置情報を取得
-        currentPosition = await getLocationQuietly();
-        console.log('位置情報取得完了:', currentPosition);
+        try {
+            // 静かに位置情報を取得
+            currentPosition = await getLocationQuietly();
+            console.log('位置情報取得完了:', currentPosition);
+        } catch (locationError) {
+            console.error('位置情報取得中にエラーが発生しました:', locationError);
+            // 位置情報エラーでも処理続行
+            // デフォルト位置を設定（京都駅）
+            currentPosition = { lat: 34.9858, lng: 135.7588 };
+            
+            // ローカルストレージに保存
+            localStorage.setItem('currentLat', currentPosition.lat);
+            localStorage.setItem('currentLng', currentPosition.lng);
+        }
+        
+        // 位置情報が確実に設定されているか確認
+        if (!currentPosition) {
+            console.warn('警告: 現在位置が設定されていません。デフォルト位置を使用します。');
+            currentPosition = { lat: 34.9858, lng: 135.7588 };
+            
+            // ローカルストレージに保存
+            localStorage.setItem('currentLat', currentPosition.lat);
+            localStorage.setItem('currentLng', currentPosition.lng);
+        }
         
         // Google Maps APIの初期化
         if (typeof google !== 'undefined' && google.maps) {
@@ -1828,12 +1867,14 @@ function loadGoogleMapsApi() {
     // 既に読み込み中または読み込み済みの場合は処理しない
     if (document.getElementById('google-maps-api')) {
         console.log('Google Maps APIは既に読み込まれているか読み込み中です');
+        // 既に読み込み中の場合は新たに初期化せず、後で実行されるcallbackに任せる
         return;
     }
 
-    // グローバルコールバック関数を使用
+    // グローバルコールバック関数を定義
     window.initMapCallback = function() {
         console.log('Google Maps API読み込み成功 - 初期化を実行します');
+        // 明示的にタイムアウトを入れて確実に初期化
         setTimeout(function() {
             if (typeof google !== 'undefined' && google.maps) {
                 initMap();
@@ -1843,7 +1884,6 @@ function loadGoogleMapsApi() {
 
     const script = document.createElement('script');
     script.id = 'google-maps-api';
-    // ここを変更: API URLにv=weeklyパラメータを追加し、referrer制限を回避
     script.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyAg27IKRj6lWefypqphZ-RRYcZWX-bMscw&libraries=places&callback=initMapCallback&v=weekly';
     script.defer = true;
     script.async = true;
