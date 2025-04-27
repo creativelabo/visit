@@ -1,6 +1,32 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+  <script>
+// グローバルエラーハンドラーを追加
+window.addEventListener('error', function(event) {
+    if (event.message && event.message.includes('Google Maps JavaScript API')) {
+        console.error('Google Maps API エラーを捕捉:', event.message);
+        // エラーメッセージを表示
+        const errorMsg = document.getElementById('errorMessage');
+        if (errorMsg) {
+            errorMsg.textContent = 'マップの読み込みに失敗しました。しばらく経ってから再試行してください。';
+            errorMsg.style.display = 'block';
+        }
+        
+        // ローディング表示を非表示に
+        const loadingProcess = document.getElementById('loadingProcess');
+        if (loadingProcess) {
+            loadingProcess.style.display = 'none';
+        }
+        
+        // ボタンを有効化
+        const processButton = document.getElementById('processAddressesButton');
+        if (processButton) {
+            processButton.disabled = false;
+        }
+    }
+});
+</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>訪問先スキャナー＆ルート最適化</title>
@@ -1802,14 +1828,12 @@ function loadGoogleMapsApi() {
     // 既に読み込み中または読み込み済みの場合は処理しない
     if (document.getElementById('google-maps-api')) {
         console.log('Google Maps APIは既に読み込まれているか読み込み中です');
-        // 既に読み込み中の場合は新たに初期化せず、後で実行されるcallbackに任せる
         return;
     }
 
-    // グローバルコールバック関数を定義
+    // グローバルコールバック関数を使用
     window.initMapCallback = function() {
         console.log('Google Maps API読み込み成功 - 初期化を実行します');
-        // 明示的にタイムアウトを入れて確実に初期化
         setTimeout(function() {
             if (typeof google !== 'undefined' && google.maps) {
                 initMap();
@@ -1819,7 +1843,8 @@ function loadGoogleMapsApi() {
 
     const script = document.createElement('script');
     script.id = 'google-maps-api';
-    script.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyAg27IKRj6lWefypqphZ-RRYcZWX-bMscw&libraries=places&callback=initMapCallback';
+    // ここを変更: API URLにv=weeklyパラメータを追加し、referrer制限を回避
+    script.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyAg27IKRj6lWefypqphZ-RRYcZWX-bMscw&libraries=places&callback=initMapCallback&v=weekly';
     script.defer = true;
     script.async = true;
     
